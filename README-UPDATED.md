@@ -11,13 +11,6 @@ Healthcare Drips is built on **Stellar** for:
 - 🌍 **Global accessibility** with built-in DEX
 - 🚀 **High throughput** (400+ TPS)
 
-## 🔗 Links
-
-- **GitHub Repository**: https://github.com/akordavid373/Healthcare-Drips-Stellar
-- **Stellar Documentation**: https://soroban.stellar.org/docs/
-- **Soroban SDK**: https://github.com/stellar/rs-soroban-sdk
-- **Freighter Wallet**: https://freighter.app/
-
 ## 🏗️ Architecture
 
 ```
@@ -399,7 +392,7 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) file for
 
 ## 🔗 Links
 
-- **GitHub Repository**: https://github.com/akordavid373/Healthcare-Drips-Stellar
+- **GitHub Repository**: https://github.com/akordavid373/Rishabh42-HealthCare-Insurance-Stellar
 - **Stellar Documentation**: https://soroban.stellar.org/docs/
 - **Soroban SDK**: https://github.com/stellar/rs-soroban-sdk
 - **Freighter Wallet**: https://freighter.app/
