@@ -91,18 +91,29 @@ pub enum LicenseStatus {
 
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenAllocation {
+    pub token: Address,
+    pub percentage: u32, // Basis points (10000 = 100%)
+    pub min_balance: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PremiumDrip {
     pub id: u64,
     pub patient: Address,
     pub insurer: Address,
-    pub token: Address,
+    pub primary_token: Address,
     pub premium_amount: i128,
+    pub token_allocations: Vec<TokenAllocation>,
     pub interval: u64,
     pub last_payment: u64,
     pub next_payment: u64,
     pub active: bool,
     pub total_paid: i128,
     pub created: u64,
+    pub auto_rebalance: bool,
+    pub slippage_tolerance: u32, // Basis points
 }
 
 #[contracttype]
@@ -210,6 +221,52 @@ pub enum FraudFlag {
     ReputationRisk = 6,
 }
 
+// ========== MULTI-TOKEN SUPPORT TYPES ==========
+
+#[contracttype]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum SwapStatus {
+    Pending = 0,
+    Executed = 1,
+    Failed = 2,
+    Cancelled = 3,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SwapRequest {
+    pub id: u64,
+    pub from_token: Address,
+    pub to_token: Address,
+    pub amount_in: i128,
+    pub min_amount_out: i128,
+    pub slippage_tolerance: u32,
+    pub deadline: u64,
+    pub status: SwapStatus,
+    pub executed_amount: i128,
+    pub created: u64,
+    pub executed: u64,
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenBalance {
+    pub token: Address,
+    pub balance: i128,
+    pub last_updated: u64,
+    pub value_usd: i128, // Estimated USD value
+}
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RebalanceConfig {
+    pub enabled: bool,
+    pub threshold: u32, // Percentage deviation before rebalancing
+    pub max_slippage: u32,
+    pub check_interval: u64,
+    pub last_check: u64,
+}
+
 #[contracttype]
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClaimPattern {
@@ -279,6 +336,11 @@ pub enum HealthcareDripsError {
     KycExpired = 25,
     LicenseExpired = 26,
     ReputationTooLow = 27,
+    InvalidTokenAllocation = 28,
+    SlippageExceeded = 29,
+    InsufficientLiquidity = 30,
+    ConversionFailed = 31,
+    RebalanceFailed = 32,
 }
 
 // ========== CONTRACT ==========
@@ -300,6 +362,7 @@ impl HealthcareDrips {
         env.storage().instance().set(&Symbol::short("next_issue_id"), &1u64);
         env.storage().instance().set(&Symbol::short("next_kyc_id"), &1u64);
         env.storage().instance().set(&Symbol::short("next_license_id"), &1u64);
+        env.storage().instance().set(&Symbol::short("next_swap_id"), &1u64);
 
         // Initialize verified contributors list
         env.storage().instance().set(&Symbol::short("verified_contributors"), &Vec::new(env));
@@ -309,6 +372,9 @@ impl HealthcareDrips {
 
         // Initialize fraud detection
         Self::initialize_fraud_detection(env);
+        
+        // Initialize multi-token support
+        Self::initialize_multi_token_support(env);
     }
 
     // Initialize fraud detection
@@ -324,6 +390,25 @@ impl HealthcareDrips {
         };
         env.storage().instance().set(&Symbol::short("fraud_thresholds"), &thresholds);
     }
+    
+    // Initialize multi-token support
+    fn initialize_multi_token_support(env: &Env) {
+        // Initialize default rebalance config
+        let rebalance_config = RebalanceConfig {
+            enabled: true,
+            threshold: 1000, // 10% deviation
+            max_slippage: 500, // 5% max slippage
+            check_interval: 86400, // Daily checks
+            last_check: env.ledger().timestamp(),
+        };
+        env.storage().instance().set(&Symbol::short("rebalance_config"), &rebalance_config);
+        
+        // Initialize pending swaps list
+        env.storage().instance().set(&Symbol::short("pending_swaps"), &Vec::new(env));
+        
+        // Initialize token balances tracking
+        env.storage().instance().set(&Symbol::short("token_balances"), &Vec::new(env));
+    }
 
     // ========== PREMIUM DRIPS ==========
 
@@ -331,9 +416,12 @@ impl HealthcareDrips {
         env: &Env,
         patient: Address,
         insurer: Address,
-        token: Address,
+        primary_token: Address,
         premium_amount: i128,
+        token_allocations: Vec<TokenAllocation>,
         interval: u64,
+        auto_rebalance: bool,
+        slippage_tolerance: u32,
     ) -> Result<u64, HealthcareDripsError> {
         if premium_amount <= 0 {
             return Err(HealthcareDripsError::InvalidAmount);
@@ -343,22 +431,30 @@ impl HealthcareDrips {
             return Err(HealthcareDripsError::InvalidAmount);
         }
         
-        let next_id = Self::get_next_drip_id(env);
+        // Validate token allocations
+        let total_percentage = token_allocations.iter().map(|alloc| alloc.percentage).sum::<u32>();
+        if total_percentage != 10000 { // Must equal 100%
+            return Err(HealthcareDripsError::InvalidTokenAllocation);
+        }
         
+        let next_id = Self::get_next_drip_id(env);
         let current_time = env.ledger().timestamp();
         
         let drip = PremiumDrip {
             id: next_id,
             patient: patient.clone(),
             insurer: insurer.clone(),
-            token: token.clone(),
+            primary_token: primary_token.clone(),
             premium_amount,
+            token_allocations: token_allocations.clone(),
             interval,
             last_payment: current_time,
             next_payment: current_time + interval,
             active: true,
             total_paid: 0,
             created: current_time,
+            auto_rebalance,
+            slippage_tolerance,
         };
         
         // Store drip
@@ -370,6 +466,11 @@ impl HealthcareDrips {
             .unwrap_or(Vec::new(env));
         patient_drips.push_back(next_id);
         env.storage().instance().set(&Symbol::new(&env, &format!("patient_drips_{}", patient)), &patient_drips);
+        
+        // Initialize token balance tracking for this drip
+        for allocation in token_allocations.iter() {
+            Self::update_token_balance(env, allocation.token.clone(), 0);
+        }
         
         Ok(next_id)
     }
@@ -419,6 +520,305 @@ impl HealthcareDrips {
         
         drip.active = false;
         env.storage().instance().set(&drip_key, &drip);
+        
+        Ok(())
+    }
+    
+    // ========== STELLAR DEX INTEGRATION ==========
+    
+    /// Create a swap request for token conversion
+    pub fn create_swap_request(
+        env: &Env,
+        from_token: Address,
+        to_token: Address,
+        amount_in: i128,
+        min_amount_out: i128,
+        slippage_tolerance: u32,
+        deadline: u64,
+        caller: Address,
+    ) -> Result<u64, HealthcareDripsError> {
+        if amount_in <= 0 || min_amount_out <= 0 {
+            return Err(HealthcareDripsError::InvalidAmount);
+        }
+        
+        if deadline <= env.ledger().timestamp() {
+            return Err(HealthcareDripsError::InvalidDeadline);
+        }
+        
+        let next_id = Self::get_next_swap_id(env);
+        let current_time = env.ledger().timestamp();
+        
+        let swap_request = SwapRequest {
+            id: next_id,
+            from_token: from_token.clone(),
+            to_token: to_token.clone(),
+            amount_in,
+            min_amount_out,
+            slippage_tolerance,
+            deadline,
+            status: SwapStatus::Pending,
+            executed_amount: 0,
+            created: current_time,
+            executed: 0,
+        };
+        
+        // Store swap request
+        env.storage().instance().set(&Symbol::new(&env, &format!("swap_{}", next_id)), &swap_request);
+        
+        // Add to pending swaps
+        let mut pending_swaps: Vec<u64> = env.storage().instance()
+            .get(&Symbol::short("pending_swaps"))
+            .unwrap_or(Vec::new(env));
+        pending_swaps.push_back(next_id);
+        env.storage().instance().set(&Symbol::short("pending_swaps"), &pending_swaps);
+        
+        // Execute the swap
+        Self::execute_swap(env, next_id, caller)?;
+        
+        Ok(next_id)
+    }
+    
+    /// Execute a swap request with slippage protection
+    fn execute_swap(
+        env: &Env,
+        swap_id: u64,
+        caller: Address,
+    ) -> Result<(), HealthcareDripsError> {
+        let swap_key = Symbol::new(&env, &format!("swap_{}", swap_id));
+        let mut swap: SwapRequest = env.storage().instance()
+            .get(&swap_key)
+            .ok_or(HealthcareDripsError::InvalidIssueId)?;
+        
+        if swap.status != SwapStatus::Pending {
+            return Err(HealthcareDripsError::ConversionFailed);
+        }
+        
+        if env.ledger().timestamp() > swap.deadline {
+            swap.status = SwapStatus::Cancelled;
+            env.storage().instance().set(&swap_key, &swap);
+            return Err(HealthcareDripsError::InvalidDeadline);
+        }
+        
+        // Get expected output amount (simplified - in real implementation would query DEX)
+        let expected_output = Self::get_swap_amount_out(
+            env, 
+            swap.from_token.clone(), 
+            swap.to_token.clone(), 
+            swap.amount_in
+        )?;
+        
+        // Check slippage
+        let slippage_amount = ((expected_output - swap.min_amount_out) * 10000) / expected_output;
+        if slippage_amount > swap.slippage_tolerance {
+            swap.status = SwapStatus::Failed;
+            env.storage().instance().set(&swap_key, &swap);
+            return Err(HealthcareDripsError::SlippageExceeded);
+        }
+        
+        // Execute the swap (simplified - would interact with Stellar DEX)
+        // For now, we'll simulate the swap
+        swap.executed_amount = expected_output;
+        swap.status = SwapStatus::Executed;
+        swap.executed = env.ledger().timestamp();
+        
+        env.storage().instance().set(&swap_key, &swap);
+        
+        // Remove from pending swaps
+        let mut pending_swaps: Vec<u64> = env.storage().instance()
+            .get(&Symbol::short("pending_swaps"))
+            .unwrap_or(Vec::new(env));
+        pending_swaps.retain(|&id| id != swap_id);
+        env.storage().instance().set(&Symbol::short("pending_swaps"), &pending_swaps);
+        
+        // Update token balances
+        Self::update_token_balance(env, swap.to_token.clone(), swap.executed_amount);
+        
+        Ok(())
+    }
+    
+    /// Get expected swap amount out (mock implementation)
+    fn get_swap_amount_out(
+        env: &Env,
+        from_token: Address,
+        to_token: Address,
+        amount_in: i128,
+    ) -> Result<i128, HealthcareDripsError> {
+        // Mock implementation - in real would query Stellar DEX for actual rates
+        // For demo purposes, assume 1:1 swap with 0.3% fee
+        let fee = (amount_in * 30) / 10000;
+        Ok(amount_in - fee)
+    }
+    
+    // ========== TOKEN BALANCE MONITORING & AUTO-REBALANCING ==========
+    
+    /// Update token balance tracking
+    fn update_token_balance(env: &Env, token: Address, amount: i128) {
+        let balance_key = Symbol::new(&env, &format!("balance_{}", token));
+        let current_time = env.ledger().timestamp();
+        
+        let mut balance: TokenBalance = env.storage().instance()
+            .get(&balance_key)
+            .unwrap_or(TokenBalance {
+                token: token.clone(),
+                balance: 0,
+                last_updated: current_time,
+                value_usd: 0,
+            });
+        
+        balance.balance += amount;
+        balance.last_updated = current_time;
+        // In real implementation, would calculate USD value based on oracle
+        balance.value_usd = balance.balance; // Simplified 1:1 for demo
+        
+        env.storage().instance().set(&balance_key, &balance);
+        
+        // Update global token balances list
+        let mut token_balances: Vec<Address> = env.storage().instance()
+            .get(&Symbol::short("token_balances"))
+            .unwrap_or(Vec::new(env));
+        
+        if !token_balances.iter().any(|&t| t == token) {
+            token_balances.push_back(token.clone());
+            env.storage().instance().set(&Symbol::short("token_balances"), &token_balances);
+        }
+    }
+    
+    /// Check and perform auto-rebalancing for all active drips
+    pub fn check_and_rebalance(env: &Env) -> Result<(), HealthcareDripsError> {
+        let config: RebalanceConfig = env.storage().instance()
+            .get(&Symbol::short("rebalance_config"))
+            .unwrap_or(RebalanceConfig {
+                enabled: false,
+                threshold: 1000,
+                max_slippage: 500,
+                check_interval: 86400,
+                last_check: 0,
+            });
+        
+        if !config.enabled {
+            return Ok(());
+        }
+        
+        let current_time = env.ledger().timestamp();
+        if current_time < config.last_check + config.check_interval {
+            return Ok(()); // Not time to check yet
+        }
+        
+        // Get all active drips that have auto-rebalance enabled
+        let active_issues = Self::get_active_issues(env);
+        for issue_id in active_issues.iter() {
+            if let Ok(issue) = Self::get_issue(env, *issue_id) {
+                // Check if this issue has associated premium drips
+                let patient_drips = Self::get_patient_premium_drips(env, issue.patient.clone());
+                for drip_id in patient_drips.iter() {
+                    if let Ok(drip) = Self::get_premium_drip(env, *drip_id) {
+                        if drip.active && drip.auto_rebalance {
+                            Self::rebalance_drip_tokens(env, *drip_id, config.max_slippage)?;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Update last check time
+        let mut updated_config = config;
+        updated_config.last_check = current_time;
+        env.storage().instance().set(&Symbol::short("rebalance_config"), &updated_config);
+        
+        Ok(())
+    }
+    
+    /// Rebalance tokens for a specific premium drip
+    fn rebalance_drip_tokens(
+        env: &Env,
+        drip_id: u64,
+        max_slippage: u32,
+    ) -> Result<(), HealthcareDripsError> {
+        let drip_key = Symbol::new(&env, &format!("drip_{}", drip_id));
+        let drip: PremiumDrip = env.storage().instance()
+            .get(&drip_key)
+            .ok_or(HealthcareDripsError::InvalidIssueId)?;
+        
+        let mut needs_rebalancing = false;
+        
+        // Check each token allocation
+        for allocation in drip.token_allocations.iter() {
+            let balance_key = Symbol::new(&env, &format!("balance_{}", allocation.token));
+            if let Some(current_balance) = env.storage().instance().get::<_, TokenBalance>(&balance_key) {
+                let target_balance = (drip.premium_amount * allocation.percentage as i128) / 10000;
+                let deviation = if target_balance > 0 {
+                    ((current_balance.balance - target_balance).abs() * 10000) / target_balance
+                } else {
+                    0
+                };
+                
+                if deviation > 1000 { // 10% deviation threshold
+                    needs_rebalancing = true;
+                    break;
+                }
+            }
+        }
+        
+        if needs_rebalancing {
+            // Perform rebalancing by swapping excess tokens to deficit tokens
+            Self::perform_rebalancing_swaps(env, &drip, max_slippage)?;
+        }
+        
+        Ok(())
+    }
+    
+    /// Perform the actual rebalancing swaps
+    fn perform_rebalancing_swaps(
+        env: &Env,
+        drip: &PremiumDrip,
+        max_slippage: u32,
+    ) -> Result<(), HealthcareDripsError> {
+        let mut excess_tokens: Vec<(Address, i128)> = Vec::new(env);
+        let mut deficit_tokens: Vec<(Address, i128)> = Vec::new(env);
+        
+        // Calculate excess and deficit for each token
+        for allocation in drip.token_allocations.iter() {
+            let balance_key = Symbol::new(&env, &format!("balance_{}", allocation.token));
+            if let Some(current_balance) = env.storage().instance().get::<_, TokenBalance>(&balance_key) {
+                let target_balance = (drip.premium_amount * allocation.percentage as i128) / 10000;
+                let difference = current_balance.balance - target_balance;
+                
+                if difference > 0 {
+                    excess_tokens.push_back((allocation.token.clone(), difference));
+                } else if difference < 0 {
+                    deficit_tokens.push_back((allocation.token.clone(), -difference));
+                }
+            }
+        }
+        
+        // Perform swaps from excess to deficit tokens
+        for (excess_token, excess_amount) in excess_tokens.iter() {
+            for (deficit_token, deficit_amount) in deficit_tokens.iter() {
+                if excess_amount > deficit_amount {
+                    // Swap the deficit amount
+                    let swap_amount = *deficit_amount;
+                    let min_amount_out = Self::get_swap_amount_out(
+                        env, 
+                        excess_token.clone(), 
+                        deficit_token.clone(), 
+                        swap_amount
+                    )?;
+                    
+                    Self::create_swap_request(
+                        env,
+                        excess_token.clone(),
+                        deficit_token.clone(),
+                        swap_amount,
+                        min_amount_out,
+                        max_slippage,
+                        env.ledger().timestamp() + 3600, // 1 hour deadline
+                        drip.insurer.clone(), // Use insurer as caller
+                    )?;
+                    
+                    break; // Move to next excess token
+                }
+            }
+        }
         
         Ok(())
     }
@@ -1128,6 +1528,148 @@ impl HealthcareDrips {
         
         flagged_claims.retain(|&id| id != issue_id);
         env.storage().instance().set(&Symbol::short("flagged_claims"), &flagged_claims);
+        
+        Ok(())
+    }
+    
+    // ========== MULTI-TOKEN SUPPORT FUNCTIONS ==========
+    
+    /// Get next swap ID
+    fn get_next_swap_id(env: &Env) -> u64 {
+        let key = Symbol::short("next_swap_id");
+        let next_id = env.storage().instance().get(&key).unwrap_or(1u64);
+        env.storage().instance().set(&key, &(next_id + 1));
+        next_id
+    }
+    
+    /// Get token balance
+    pub fn get_token_balance(env: &Env, token: Address) -> Result<TokenBalance, HealthcareDripsError> {
+        env.storage().instance()
+            .get(&Symbol::new(&env, &format!("balance_{}", token)))
+            .ok_or(HealthcareDripsError::InvalidToken)
+    }
+    
+    /// Get swap request
+    pub fn get_swap_request(env: &Env, swap_id: u64) -> Result<SwapRequest, HealthcareDripsError> {
+        env.storage().instance()
+            .get(&Symbol::new(&env, &format!("swap_{}", swap_id)))
+            .ok_or(HealthcareDripsError::InvalidIssueId)
+    }
+    
+    /// Get pending swaps
+    pub fn get_pending_swaps(env: &Env) -> Vec<u64> {
+        env.storage().instance()
+            .get(&Symbol::short("pending_swaps"))
+            .unwrap_or(Vec::new(env))
+    }
+    
+    /// Get rebalance configuration
+    pub fn get_rebalance_config(env: &Env) -> RebalanceConfig {
+        env.storage().instance()
+            .get(&Symbol::short("rebalance_config"))
+            .unwrap_or(RebalanceConfig {
+                enabled: false,
+                threshold: 1000,
+                max_slippage: 500,
+                check_interval: 86400,
+                last_check: 0,
+            })
+    }
+    
+    /// Update rebalance configuration (admin only)
+    pub fn update_rebalance_config(
+        env: &Env,
+        config: RebalanceConfig,
+        caller: Address,
+    ) -> Result<(), HealthcareDripsError> {
+        if !Self::has_role(env, caller, ISSUE_CREATOR) {
+            return Err(HealthcareDripsError::Unauthorized);
+        }
+        
+        env.storage().instance().set(&Symbol::short("rebalance_config"), &config);
+        Ok(())
+    }
+    
+    /// Get all tracked token balances
+    pub fn get_all_token_balances(env: &Env) -> Vec<TokenBalance> {
+        let token_addresses: Vec<Address> = env.storage().instance()
+            .get(&Symbol::short("token_balances"))
+            .unwrap_or(Vec::new(env));
+        
+        let mut balances = Vec::new(env);
+        for token in token_addresses.iter() {
+            if let Ok(balance) = Self::get_token_balance(env, token.clone()) {
+                balances.push_back(balance);
+            }
+        }
+        
+        balances
+    }
+    
+    /// Process multi-token premium payment
+    pub fn process_multi_token_premium_payment(
+        env: &Env,
+        drip_id: u64,
+        caller: Address,
+    ) -> Result<(), HealthcareDripsError> {
+        let drip_key = Symbol::new(&env, &format!("drip_{}", drip_id));
+        let mut drip: PremiumDrip = env.storage().instance()
+            .get(&drip_key)
+            .ok_or(HealthcareDripsError::InvalidIssueId)?;
+        
+        if !drip.active {
+            return Err(HealthcareDripsError::IssueNotActive);
+        }
+        
+        if drip.insurer != caller {
+            return Err(HealthcareDripsError::Unauthorized);
+        }
+        
+        let current_time = env.ledger().timestamp();
+        if current_time < drip.next_payment {
+            return Err(HealthcareDripsError::InvalidAmount); // Payment not due yet
+        }
+        
+        // Process payment for each token allocation
+        for allocation in drip.token_allocations.iter() {
+            let token_amount = (drip.premium_amount * allocation.percentage as i128) / 10000;
+            
+            // Check if we have sufficient balance or need to swap
+            let balance_key = Symbol::new(&env, &format!("balance_{}", allocation.token));
+            if let Some(current_balance) = env.storage().instance().get::<_, TokenBalance>(&balance_key) {
+                if current_balance.balance < token_amount {
+                    // Need to swap from primary token
+                    let swap_amount = token_amount - current_balance.balance;
+                    let min_amount_out = Self::get_swap_amount_out(
+                        env,
+                        drip.primary_token.clone(),
+                        allocation.token.clone(),
+                        swap_amount
+                    )?;
+                    
+                    Self::create_swap_request(
+                        env,
+                        drip.primary_token.clone(),
+                        allocation.token.clone(),
+                        swap_amount,
+                        min_amount_out,
+                        drip.slippage_tolerance,
+                        current_time + 1800, // 30 min deadline
+                        caller.clone(),
+                    )?;
+                }
+                
+                // Update the balance (deduct for premium payment)
+                Self::update_token_balance(env, allocation.token.clone(), -token_amount);
+            }
+        }
+        
+        // Update drip payment schedule
+        drip.last_payment = current_time;
+        drip.next_payment = current_time + drip.interval;
+        drip.total_paid += drip.premium_amount;
+        
+        env.storage().instance().set(&drip_key, &drip);
         
         Ok(())
     }

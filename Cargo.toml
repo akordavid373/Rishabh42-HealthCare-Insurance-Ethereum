@@ -1,9 +1,9 @@
 [package]
 name = "healthcare-drips"
-version = "1.0.0"
+version = "2.0.0"
 edition = "2021"
 authors = ["akordavid373 <akordavid373@gmail.com>"]
-description = "Healthcare Drips - Medical insurance platform with recurring payments on Stellar"
+description = "Healthcare Drips - Medical insurance platform with multi-token premium payments and Stellar DEX integration"
 license = "MIT"
 
 [lib]
