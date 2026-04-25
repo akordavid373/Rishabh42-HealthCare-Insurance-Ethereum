@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const { runNotificationMigration } = require('./notificationMigration');
 
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'healthcare.db');
 
@@ -133,134 +134,6 @@ function initializeDatabase() {
         read BOOLEAN DEFAULT FALSE,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users (id)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS iot_devices (
-        device_id TEXT PRIMARY KEY,
-        patient_id INTEGER NOT NULL,
-        device_type TEXT NOT NULL,
-        device_name TEXT NOT NULL,
-        manufacturer TEXT,
-        model TEXT,
-        firmware_version TEXT DEFAULT '1.0.0',
-        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'maintenance')),
-        last_reading_at DATETIME,
-        registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (patient_id) REFERENCES patients (id)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS iot_health_readings (
-        reading_id TEXT PRIMARY KEY,
-        device_id TEXT NOT NULL,
-        patient_id INTEGER NOT NULL,
-        readings TEXT NOT NULL,
-        alert_level TEXT DEFAULT 'normal' CHECK (alert_level IN ('normal', 'warning', 'critical')),
-        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (device_id) REFERENCES iot_devices (device_id),
-        FOREIGN KEY (patient_id) REFERENCES patients (id)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS iot_alerts (
-        alert_id TEXT PRIMARY KEY,
-        patient_id INTEGER NOT NULL,
-        device_id TEXT NOT NULL,
-        metric TEXT NOT NULL,
-        value REAL NOT NULL,
-        level TEXT NOT NULL CHECK (level IN ('warning', 'critical')),
-        message TEXT NOT NULL,
-        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'acknowledged', 'emergency_response')),
-        acknowledged_by INTEGER,
-        acknowledged_at DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (patient_id) REFERENCES patients (id)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS emergency_responses (
-        response_id TEXT PRIMARY KEY,
-        patient_id INTEGER NOT NULL,
-        alert_id TEXT NOT NULL,
-        responder_id INTEGER,
-        status TEXT DEFAULT 'initiated' CHECK (status IN ('initiated', 'dispatched', 'on_scene', 'resolved')),
-        initiated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        resolved_at DATETIME,
-        FOREIGN KEY (patient_id) REFERENCES patients (id)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS platform_integrations (
-        integration_id TEXT PRIMARY KEY,
-        platform_name TEXT NOT NULL,
-        platform_type TEXT NOT NULL,
-        data_standard TEXT NOT NULL,
-        endpoint_url TEXT NOT NULL,
-        auth_type TEXT DEFAULT 'api_key',
-        auth_config TEXT DEFAULT '{}',
-        sync_interval INTEGER DEFAULT 300,
-        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'error')),
-        last_sync_at DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS integration_sync_logs (
-        sync_id TEXT PRIMARY KEY,
-        integration_id TEXT NOT NULL,
-        direction TEXT DEFAULT 'outbound' CHECK (direction IN ('inbound', 'outbound', 'bidirectional')),
-        records_count INTEGER DEFAULT 0,
-        status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'partial')),
-        error_details TEXT,
-        synced_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (integration_id) REFERENCES platform_integrations (integration_id)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS advanced_payment_transactions (
-        transaction_id TEXT PRIMARY KEY,
-        payer_id TEXT NOT NULL,
-        payee_id TEXT NOT NULL,
-        amount REAL NOT NULL,
-        currency TEXT NOT NULL,
-        payment_method TEXT DEFAULT 'standard',
-        status TEXT NOT NULL CHECK (status IN ('pending', 'completed', 'failed', 'blocked')),
-        fraud_score REAL DEFAULT 0,
-        fraud_flags TEXT DEFAULT '[]',
-        settlement_data TEXT DEFAULT '{}',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS marketplace_policies (
-        policy_id TEXT PRIMARY KEY,
-        provider_id TEXT NOT NULL,
-        policy_name TEXT NOT NULL,
-        policy_type TEXT NOT NULL,
-        coverage_amount REAL NOT NULL,
-        monthly_premium REAL NOT NULL,
-        deductible REAL DEFAULT 0,
-        coverage_details TEXT DEFAULT '{}',
-        eligibility_criteria TEXT DEFAULT '{}',
-        smart_contract_address TEXT,
-        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'suspended')),
-        listed_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS policy_ratings (
-        id TEXT PRIMARY KEY,
-        policy_id TEXT NOT NULL,
-        user_id INTEGER,
-        rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
-        review TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (policy_id) REFERENCES marketplace_policies (policy_id)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS policy_disputes (
-        dispute_id TEXT PRIMARY KEY,
-        policy_id TEXT NOT NULL,
-        user_id INTEGER,
-        reason TEXT NOT NULL,
-        description TEXT,
-        status TEXT DEFAULT 'open' CHECK (status IN ('open', 'under_review', 'resolved', 'closed')),
-        resolution TEXT,
-        filed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        resolved_at DATETIME,
-        FOREIGN KEY (policy_id) REFERENCES marketplace_policies (policy_id)
       )`
     ];
 
@@ -304,15 +177,22 @@ function initializeDatabase() {
                 completedIndexes++;
               }
               if (completedIndexes === indexes.length) {
-                db.close((err) => {
-                  if (err) {
-                    console.error('Error closing database:', err);
+                runNotificationMigration(db)
+                  .then(() => {
+                    db.close((err) => {
+                      if (err) {
+                        console.error('Error closing database:', err);
+                        reject(err);
+                      } else {
+                        console.log('Database initialized successfully');
+                        resolve();
+                      }
+                    });
+                  })
+                  .catch((err) => {
+                    console.error('Notification migration error:', err);
                     reject(err);
-                  } else {
-                    console.log('Database initialized successfully');
-                    resolve();
-                  }
-                });
+                  });
               }
             });
           });
