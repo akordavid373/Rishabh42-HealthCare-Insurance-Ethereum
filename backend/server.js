@@ -32,6 +32,10 @@ const mlModelServingRoutes = require('./routes/mlModelServing');
 const advancedSearchRoutes = require('./routes/advancedSearch');
 const advancedNotificationsRoutes = require('./routes/advancedNotifications');
 const collaborationRoutes = require('./routes/collaboration');
+const treasuryRoutes = require('./routes/treasury');
+const dataVisualizationRoutes = require('./routes/dataVisualization');
+const reinsuranceRoutes = require('./routes/reinsurance');
+const fraudContractsRoutes = require('./routes/fraudContracts');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -101,6 +105,10 @@ app.use('/api/ml', authenticateToken, mlModelServingRoutes);
 app.use('/api/search', authenticateToken, advancedSearchRoutes);
 app.use('/api/notifications', authenticateToken, advancedNotificationsRoutes);
 app.use('/api/collaboration', authenticateToken, collaborationRoutes);
+app.use('/api/treasury', authenticateToken, treasuryRoutes);
+app.use('/api/visualization', authenticateToken, dataVisualizationRoutes);
+app.use('/api/reinsurance', authenticateToken, reinsuranceRoutes);
+app.use('/api/fraud-contracts', authenticateToken, fraudContractsRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
