@@ -274,110 +274,165 @@ function initializeDatabase() {
         PRIMARY KEY (workspace_id, user_id)
       )`,
 
-      `CREATE TABLE IF NOT EXISTS fee_configs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        asset_code TEXT NOT NULL,
-        fee_context TEXT NOT NULL CHECK (fee_context IN ('network', 'processing')),
-        fee_type TEXT NOT NULL CHECK (fee_type IN ('flat', 'percentage', 'flat_plus_percentage')),
-        flat_amount REAL DEFAULT 0,
-        percentage_rate REAL DEFAULT 0,
-        min_fee REAL DEFAULT 0,
-        max_fee REAL,
-        is_active INTEGER DEFAULT 1,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(asset_code, fee_context)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS report_definitions (
-        report_id TEXT PRIMARY KEY,
+      `CREATE TABLE IF NOT EXISTS treasuries (
+        treasury_id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
-        report_type TEXT NOT NULL CHECK (report_type IN ('claims', 'payments', 'patients', 'health_metrics', 'premium', 'custom')),
-        data_sources TEXT NOT NULL DEFAULT '[]',
-        columns TEXT NOT NULL DEFAULT '[]',
-        filters TEXT NOT NULL DEFAULT '{}',
-        grouping TEXT DEFAULT '[]',
-        sorting TEXT DEFAULT '[]',
-        visualization TEXT DEFAULT '{}',
+        required_signatures INTEGER NOT NULL,
+        total_signers INTEGER NOT NULL,
+        balance REAL DEFAULT 0,
+        currency TEXT DEFAULT 'USD',
+        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'frozen', 'closed')),
         created_by TEXT NOT NULL,
-        is_public INTEGER DEFAULT 0,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
 
-      `CREATE TABLE IF NOT EXISTS report_schedules (
-        schedule_id TEXT PRIMARY KEY,
-        report_id TEXT NOT NULL,
-        cron_expression TEXT NOT NULL,
-        timezone TEXT DEFAULT 'UTC',
-        output_format TEXT NOT NULL DEFAULT 'json' CHECK (output_format IN ('json', 'csv', 'pdf')),
-        distribution TEXT NOT NULL DEFAULT '[]',
-        is_active INTEGER DEFAULT 1,
-        last_run_at DATETIME,
-        next_run_at DATETIME,
-        created_by TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (report_id) REFERENCES report_definitions(report_id)
+      `CREATE TABLE IF NOT EXISTS treasury_signers (
+        treasury_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        role TEXT DEFAULT 'approver' CHECK (role IN ('owner', 'admin', 'approver', 'viewer')),
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (treasury_id, user_id)
       )`,
 
-      `CREATE TABLE IF NOT EXISTS report_executions (
-        execution_id TEXT PRIMARY KEY,
-        report_id TEXT NOT NULL,
-        schedule_id TEXT,
-        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed')),
-        output_format TEXT NOT NULL DEFAULT 'json',
-        result_data TEXT,
-        row_count INTEGER DEFAULT 0,
-        execution_time_ms INTEGER,
-        error_message TEXT,
-        executed_by TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        completed_at DATETIME,
-        FOREIGN KEY (report_id) REFERENCES report_definitions(report_id)
+      `CREATE TABLE IF NOT EXISTS treasury_transactions (
+        tx_id TEXT PRIMARY KEY,
+        treasury_id TEXT NOT NULL,
+        proposer_id TEXT NOT NULL,
+        tx_type TEXT NOT NULL,
+        amount REAL NOT NULL,
+        currency TEXT DEFAULT 'USD',
+        recipient TEXT,
+        description TEXT,
+        tx_hash TEXT NOT NULL,
+        required_signatures INTEGER NOT NULL,
+        signatures_collected INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'executed', 'rejected')),
+        proposed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        executed_at DATETIME
       )`,
 
-      `CREATE TABLE IF NOT EXISTS analytics_dashboards (
+      `CREATE TABLE IF NOT EXISTS treasury_signatures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tx_id TEXT NOT NULL,
+        signer_id TEXT NOT NULL,
+        sig_hash TEXT NOT NULL,
+        signed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS treasury_audit_log (
+        log_id TEXT PRIMARY KEY,
+        treasury_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        details TEXT DEFAULT '{}',
+        logged_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS viz_dashboards (
         dashboard_id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         description TEXT,
-        layout TEXT NOT NULL DEFAULT '[]',
-        created_by TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        layout TEXT DEFAULT '[]',
         is_public INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
 
-      `CREATE TABLE IF NOT EXISTS analytics_widgets (
+      `CREATE TABLE IF NOT EXISTS viz_widgets (
         widget_id TEXT PRIMARY KEY,
         dashboard_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        widget_type TEXT NOT NULL CHECK (widget_type IN ('kpi', 'chart', 'table', 'metric', 'prediction')),
+        title TEXT NOT NULL,
+        chart_type TEXT NOT NULL,
         data_source TEXT NOT NULL,
-        query_config TEXT NOT NULL DEFAULT '{}',
-        visualization_config TEXT NOT NULL DEFAULT '{}',
-        position_x INTEGER DEFAULT 0,
-        position_y INTEGER DEFAULT 0,
-        width INTEGER DEFAULT 1,
-        height INTEGER DEFAULT 1,
-        refresh_interval_sec INTEGER DEFAULT 300,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (dashboard_id) REFERENCES analytics_dashboards(dashboard_id)
+        config TEXT DEFAULT '{}',
+        position INTEGER DEFAULT 0,
+        refresh_interval INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`,
 
-      `CREATE TABLE IF NOT EXISTS analytics_snapshots (
-        snapshot_id TEXT PRIMARY KEY,
-        dashboard_id TEXT,
-        widget_id TEXT,
-        snapshot_type TEXT NOT NULL CHECK (snapshot_type IN ('realtime', 'scheduled', 'prediction')),
-        metric_name TEXT NOT NULL,
-        metric_value REAL,
-        dimensions TEXT DEFAULT '{}',
-        period_start DATETIME,
-        period_end DATETIME,
+      `CREATE TABLE IF NOT EXISTS reinsurance_pools (
+        pool_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        pool_type TEXT DEFAULT 'proportional',
+        total_capacity REAL NOT NULL,
+        used_capacity REAL DEFAULT 0,
+        min_contribution REAL DEFAULT 0,
+        risk_model TEXT DEFAULT '{}',
+        governance_rules TEXT DEFAULT '{}',
+        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'closed')),
+        created_by TEXT NOT NULL,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS reinsurance_members (
+        member_id TEXT PRIMARY KEY,
+        pool_id TEXT NOT NULL,
+        insurer_id TEXT NOT NULL,
+        contribution REAL NOT NULL,
+        share_percentage REAL NOT NULL,
+        joined_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS reinsurance_claims (
+        claim_id TEXT PRIMARY KEY,
+        pool_id TEXT NOT NULL,
+        submitter_id TEXT NOT NULL,
+        original_claim_id TEXT,
+        claimed_amount REAL NOT NULL,
+        risk_distribution TEXT DEFAULT '[]',
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'settled', 'rejected')),
+        submitted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        settled_at DATETIME
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS reinsurance_settlements (
+        settlement_id TEXT PRIMARY KEY,
+        claim_id TEXT NOT NULL,
+        pool_id TEXT NOT NULL,
+        insurer_id TEXT NOT NULL,
+        amount REAL NOT NULL,
+        status TEXT DEFAULT 'completed',
+        settled_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS reinsurance_proposals (
+        proposal_id TEXT PRIMARY KEY,
+        pool_id TEXT NOT NULL,
+        proposer_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT,
+        proposal_type TEXT DEFAULT 'parameter_change',
+        votes_for INTEGER DEFAULT 0,
+        votes_against INTEGER DEFAULT 0,
+        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'passed', 'rejected', 'expired')),
+        voting_deadline DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS fraud_contract_analyses (
+        analysis_id TEXT PRIMARY KEY,
+        claim_id INTEGER NOT NULL,
+        patient_hash TEXT NOT NULL,
+        detected_patterns TEXT DEFAULT '[]',
+        risk_score REAL DEFAULT 0,
+        risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
+        prevention_action TEXT NOT NULL,
+        ml_confidence REAL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS fraud_investigations (
+        investigation_id TEXT PRIMARY KEY,
+        claim_id INTEGER NOT NULL,
+        analysis_id TEXT NOT NULL,
+        status TEXT DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
+        priority TEXT DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+        resolution TEXT,
+        opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        resolved_at DATETIME
       )`
     ];
 
@@ -405,16 +460,13 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_search_analytics_query ON search_analytics(query)',
       'CREATE INDEX IF NOT EXISTS idx_collab_messages_workspace ON collab_messages(workspace_id)',
       'CREATE INDEX IF NOT EXISTS idx_collab_docs_workspace ON collab_documents(workspace_id)',
-      'CREATE INDEX IF NOT EXISTS idx_fee_configs_asset ON fee_configs(asset_code, fee_context)',
-      'CREATE INDEX IF NOT EXISTS idx_report_defs_creator ON report_definitions(created_by)',
-      'CREATE INDEX IF NOT EXISTS idx_report_defs_type ON report_definitions(report_type)',
-      'CREATE INDEX IF NOT EXISTS idx_report_schedules_report ON report_schedules(report_id)',
-      'CREATE INDEX IF NOT EXISTS idx_report_executions_report ON report_executions(report_id)',
-      'CREATE INDEX IF NOT EXISTS idx_report_executions_status ON report_executions(status)',
-      'CREATE INDEX IF NOT EXISTS idx_analytics_dashboards_creator ON analytics_dashboards(created_by)',
-      'CREATE INDEX IF NOT EXISTS idx_analytics_widgets_dashboard ON analytics_widgets(dashboard_id)',
-      'CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_dashboard ON analytics_snapshots(dashboard_id)',
-      'CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_metric ON analytics_snapshots(metric_name)'
+      'CREATE INDEX IF NOT EXISTS idx_treasury_tx_treasury ON treasury_transactions(treasury_id)',
+      'CREATE INDEX IF NOT EXISTS idx_treasury_audit_treasury ON treasury_audit_log(treasury_id)',
+      'CREATE INDEX IF NOT EXISTS idx_viz_widgets_dashboard ON viz_widgets(dashboard_id)',
+      'CREATE INDEX IF NOT EXISTS idx_reinsurance_members_pool ON reinsurance_members(pool_id)',
+      'CREATE INDEX IF NOT EXISTS idx_reinsurance_claims_pool ON reinsurance_claims(pool_id)',
+      'CREATE INDEX IF NOT EXISTS idx_fraud_analyses_claim ON fraud_contract_analyses(claim_id)',
+      'CREATE INDEX IF NOT EXISTS idx_fraud_investigations_status ON fraud_investigations(status)'
 
     ];
 
