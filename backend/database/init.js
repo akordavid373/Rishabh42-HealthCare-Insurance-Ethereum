@@ -287,6 +287,97 @@ function initializeDatabase() {
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(asset_code, fee_context)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS report_definitions (
+        report_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        report_type TEXT NOT NULL CHECK (report_type IN ('claims', 'payments', 'patients', 'health_metrics', 'premium', 'custom')),
+        data_sources TEXT NOT NULL DEFAULT '[]',
+        columns TEXT NOT NULL DEFAULT '[]',
+        filters TEXT NOT NULL DEFAULT '{}',
+        grouping TEXT DEFAULT '[]',
+        sorting TEXT DEFAULT '[]',
+        visualization TEXT DEFAULT '{}',
+        created_by TEXT NOT NULL,
+        is_public INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS report_schedules (
+        schedule_id TEXT PRIMARY KEY,
+        report_id TEXT NOT NULL,
+        cron_expression TEXT NOT NULL,
+        timezone TEXT DEFAULT 'UTC',
+        output_format TEXT NOT NULL DEFAULT 'json' CHECK (output_format IN ('json', 'csv', 'pdf')),
+        distribution TEXT NOT NULL DEFAULT '[]',
+        is_active INTEGER DEFAULT 1,
+        last_run_at DATETIME,
+        next_run_at DATETIME,
+        created_by TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (report_id) REFERENCES report_definitions(report_id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS report_executions (
+        execution_id TEXT PRIMARY KEY,
+        report_id TEXT NOT NULL,
+        schedule_id TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+        output_format TEXT NOT NULL DEFAULT 'json',
+        result_data TEXT,
+        row_count INTEGER DEFAULT 0,
+        execution_time_ms INTEGER,
+        error_message TEXT,
+        executed_by TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        completed_at DATETIME,
+        FOREIGN KEY (report_id) REFERENCES report_definitions(report_id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS analytics_dashboards (
+        dashboard_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        layout TEXT NOT NULL DEFAULT '[]',
+        created_by TEXT NOT NULL,
+        is_public INTEGER DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS analytics_widgets (
+        widget_id TEXT PRIMARY KEY,
+        dashboard_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        widget_type TEXT NOT NULL CHECK (widget_type IN ('kpi', 'chart', 'table', 'metric', 'prediction')),
+        data_source TEXT NOT NULL,
+        query_config TEXT NOT NULL DEFAULT '{}',
+        visualization_config TEXT NOT NULL DEFAULT '{}',
+        position_x INTEGER DEFAULT 0,
+        position_y INTEGER DEFAULT 0,
+        width INTEGER DEFAULT 1,
+        height INTEGER DEFAULT 1,
+        refresh_interval_sec INTEGER DEFAULT 300,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (dashboard_id) REFERENCES analytics_dashboards(dashboard_id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS analytics_snapshots (
+        snapshot_id TEXT PRIMARY KEY,
+        dashboard_id TEXT,
+        widget_id TEXT,
+        snapshot_type TEXT NOT NULL CHECK (snapshot_type IN ('realtime', 'scheduled', 'prediction')),
+        metric_name TEXT NOT NULL,
+        metric_value REAL,
+        dimensions TEXT DEFAULT '{}',
+        period_start DATETIME,
+        period_end DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     ];
 
@@ -314,7 +405,16 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_search_analytics_query ON search_analytics(query)',
       'CREATE INDEX IF NOT EXISTS idx_collab_messages_workspace ON collab_messages(workspace_id)',
       'CREATE INDEX IF NOT EXISTS idx_collab_docs_workspace ON collab_documents(workspace_id)',
-      'CREATE INDEX IF NOT EXISTS idx_fee_configs_asset ON fee_configs(asset_code, fee_context)'
+      'CREATE INDEX IF NOT EXISTS idx_fee_configs_asset ON fee_configs(asset_code, fee_context)',
+      'CREATE INDEX IF NOT EXISTS idx_report_defs_creator ON report_definitions(created_by)',
+      'CREATE INDEX IF NOT EXISTS idx_report_defs_type ON report_definitions(report_type)',
+      'CREATE INDEX IF NOT EXISTS idx_report_schedules_report ON report_schedules(report_id)',
+      'CREATE INDEX IF NOT EXISTS idx_report_executions_report ON report_executions(report_id)',
+      'CREATE INDEX IF NOT EXISTS idx_report_executions_status ON report_executions(status)',
+      'CREATE INDEX IF NOT EXISTS idx_analytics_dashboards_creator ON analytics_dashboards(created_by)',
+      'CREATE INDEX IF NOT EXISTS idx_analytics_widgets_dashboard ON analytics_widgets(dashboard_id)',
+      'CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_dashboard ON analytics_snapshots(dashboard_id)',
+      'CREATE INDEX IF NOT EXISTS idx_analytics_snapshots_metric ON analytics_snapshots(metric_name)'
 
     ];
 

@@ -33,6 +33,8 @@ const mlModelServingRoutes = require('./routes/mlModelServing');
 const advancedSearchRoutes = require('./routes/advancedSearch');
 const advancedNotificationsRoutes = require('./routes/advancedNotifications');
 const collaborationRoutes = require('./routes/collaboration');
+const advancedReportingRoutes = require('./routes/advancedReporting');
+const advancedAnalyticsRoutes = require('./routes/advancedAnalytics');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -103,6 +105,8 @@ app.use('/api/ml', authenticateToken, mlModelServingRoutes);
 app.use('/api/search', authenticateToken, advancedSearchRoutes);
 app.use('/api/notifications', authenticateToken, advancedNotificationsRoutes);
 app.use('/api/collaboration', authenticateToken, collaborationRoutes);
+app.use('/api/reporting', authenticateToken, advancedReportingRoutes);
+app.use('/api/analytics', authenticateToken, advancedAnalyticsRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
