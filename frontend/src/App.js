@@ -19,7 +19,8 @@ import {
   Database,
   Lock,
   Cpu,
-  CreditCard as CreditIcon
+  CreditCard as CreditIcon,
+  Bell,
 } from 'lucide-react';
 import './App.css';
 import MedicalRecordManager from './components/MedicalRecordManager';
@@ -27,6 +28,8 @@ import MFASystem from './components/MFASystem';
 import ClaimEngine from './components/ClaimEngine';
 import PaymentGateways from './components/PaymentGateways';
 import PatientDashboard from './components/PatientDashboard';
+import ProviderDashboard from './components/ProviderDashboard';
+import NotificationCenter from './components/NotificationCenter';
 
 // Contract ABIs (simplified for demo)
 const HEALTHCARE_DRIPS_ABI = [
@@ -326,6 +329,20 @@ function App() {
               <CreditIcon className="w-4 h-4" />
               Payments
             </button>
+            <button
+              onClick={() => setActiveTab('provider')}
+              className={activeTab === 'provider' ? 'active' : ''}
+            >
+              <Users className="w-4 h-4" />
+              Provider
+            </button>
+            <button
+              onClick={() => setActiveTab('notifications')}
+              className={activeTab === 'notifications' ? 'active' : ''}
+            >
+              <Bell className="w-4 h-4" />
+              Notifications
+            </button>
           </nav>
           
           <div className="wallet-section">
@@ -360,6 +377,8 @@ function App() {
             {activeTab === 'security' && <MFASystem account={account} contract={contract} />}
             {activeTab === 'engine' && <ClaimEngine account={account} contract={contract} />}
             {activeTab === 'payments' && <PaymentGateways account={account} contract={contract} />}
+            {activeTab === 'provider' && <ProviderDashboard user={user} token={token} />}
+            {activeTab === 'notifications' && <NotificationCenter user={user} token={token} />}
           </>
         )}
       </main>

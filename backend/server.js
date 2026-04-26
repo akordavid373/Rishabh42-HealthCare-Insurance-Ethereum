@@ -32,6 +32,7 @@ const mlModelServingRoutes = require('./routes/mlModelServing');
 const advancedSearchRoutes = require('./routes/advancedSearch');
 const advancedNotificationsRoutes = require('./routes/advancedNotifications');
 const collaborationRoutes = require('./routes/collaboration');
+const providerRoutes = require('./routes/provider');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -101,6 +102,7 @@ app.use('/api/ml', authenticateToken, mlModelServingRoutes);
 app.use('/api/search', authenticateToken, advancedSearchRoutes);
 app.use('/api/notifications', authenticateToken, advancedNotificationsRoutes);
 app.use('/api/collaboration', authenticateToken, collaborationRoutes);
+app.use('/api/providers', authenticateToken, providerRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
@@ -160,13 +162,10 @@ async function startServer() {
 
       // Start queue processor after server is listening
       QueueProcessor.getInstance().start();
-    
-    // Start system monitoring
-    startSystemMonitoring();
-    
-    server.listen(PORT, () => {
-      console.log(`🚀 Healthcare API Server running on port ${PORT}`);
-      console.log(`📊 Dashboard available at: http://localhost:${PORT}/api/health`);
+
+      // Start system monitoring
+      startSystemMonitoring();
+
       console.log(`🔒 Advanced Security API enabled`);
       console.log(`📈 Performance monitoring active`);
       console.log(`🤖 AI Recommendation Engine enabled`);
