@@ -37,6 +37,7 @@ const treasuryRoutes = require('./routes/treasury');
 const dataVisualizationRoutes = require('./routes/dataVisualization');
 const reinsuranceRoutes = require('./routes/reinsurance');
 const fraudContractsRoutes = require('./routes/fraudContracts');
+const blockchainRoutes = require('./routes/blockchain');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -112,6 +113,9 @@ app.use('/api/visualization', authenticateToken, dataVisualizationRoutes);
 app.use('/api/reinsurance', authenticateToken, reinsuranceRoutes);
 app.use('/api/fraud-contracts', authenticateToken, fraudContractsRoutes);
 
+// ── Blockchain Integration Layer ─────────────────────────────────────────
+app.use('/api/blockchain', blockchainRoutes);
+
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
 app.use('/api/notifications/analytics',    authenticateToken, notificationAnalyticsRoutes);
@@ -161,6 +165,10 @@ async function startServer() {
   try {
     await initializeDatabase();
 
+    // Initialize blockchain integration layer
+    const blockchainLayer = require('./blockchain');
+    await blockchainLayer.initialize();
+
     // Initialise notification engine with the socket.io instance
     NotificationEngine.getInstance(io);
 
@@ -181,6 +189,7 @@ async function startServer() {
       console.log(`🔗 Cross-Platform Integration Framework enabled`);
       console.log(`💳 Advanced Payment Processing API enabled`);
       console.log(`🏪 Insurance Marketplace Platform enabled`);
+      console.log(`⛓️  Blockchain Integration Layer enabled`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
