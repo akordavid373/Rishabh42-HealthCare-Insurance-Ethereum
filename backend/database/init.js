@@ -433,6 +433,149 @@ function initializeDatabase() {
         resolution TEXT,
         opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         resolved_at DATETIME
+      )`,
+
+      // ── MLOps tables ──────────────────────────────────────────────────────────
+      `CREATE TABLE IF NOT EXISTS mlops_pipelines (
+        pipeline_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        model_type TEXT NOT NULL,
+        config TEXT DEFAULT '{}',
+        status TEXT DEFAULT 'idle' CHECK (status IN ('idle', 'running', 'failed')),
+        last_run_id TEXT,
+        created_by TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS mlops_runs (
+        run_id TEXT PRIMARY KEY,
+        pipeline_id TEXT NOT NULL,
+        model_id TEXT,
+        status TEXT DEFAULT 'running' CHECK (status IN ('running', 'completed', 'failed')),
+        triggered_by TEXT,
+        metrics TEXT,
+        error TEXT,
+        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        finished_at DATETIME
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS mlops_deployments (
+        deployment_id TEXT PRIMARY KEY,
+        model_id TEXT NOT NULL,
+        pipeline_id TEXT,
+        run_id TEXT,
+        environment TEXT NOT NULL CHECK (environment IN ('staging', 'production', 'canary')),
+        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'rolled_back', 'inactive')),
+        deployed_by TEXT,
+        deployed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS mlops_feedback (
+        feedback_id TEXT PRIMARY KEY,
+        model_id TEXT NOT NULL,
+        prediction_id TEXT,
+        actual_value TEXT NOT NULL,
+        predicted_value TEXT NOT NULL,
+        latency_ms INTEGER DEFAULT 0,
+        recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS mlops_drift_alerts (
+        alert_id TEXT PRIMARY KEY,
+        model_id TEXT NOT NULL,
+        drift_score REAL NOT NULL,
+        severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high')),
+        baseline_accuracy REAL,
+        recent_accuracy REAL,
+        detected_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS mlops_retraining_schedule (
+        schedule_id TEXT PRIMARY KEY,
+        pipeline_id TEXT NOT NULL,
+        run_id TEXT,
+        trigger_type TEXT NOT NULL,
+        triggered_by TEXT,
+        reason TEXT,
+        status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'triggered', 'completed')),
+        scheduled_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS mlops_experiments (
+        experiment_id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT,
+        variants TEXT NOT NULL,
+        status TEXT DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed')),
+        start_date DATETIME,
+        end_date DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS mlops_explainability (
+        explain_id TEXT PRIMARY KEY,
+        model_id TEXT NOT NULL,
+        run_id TEXT,
+        method TEXT NOT NULL,
+        feature_importance TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      // ── From main: system_logs + blockchain tables ────────────────────────────
+      `CREATE TABLE IF NOT EXISTS system_logs (
+        id TEXT PRIMARY KEY,
+        level TEXT NOT NULL,
+        message TEXT NOT NULL,
+        context TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        source TEXT,
+        user_id INTEGER,
+        ip_address TEXT,
+        user_agent TEXT,
+        compliance_relevant BOOLEAN DEFAULT FALSE,
+        FOREIGN KEY (user_id) REFERENCES users (id)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_transactions (
+        id TEXT PRIMARY KEY,
+        network TEXT NOT NULL,
+        tx_hash TEXT NOT NULL,
+        from_address TEXT,
+        to_address TEXT,
+        contract_address TEXT,
+        value TEXT,
+        gas_used INTEGER,
+        status TEXT,
+        risk_level TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_contract_analyses (
+        id TEXT PRIMARY KEY,
+        network TEXT NOT NULL,
+        contract_address TEXT NOT NULL,
+        risk_level TEXT,
+        analysis_result TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_compliance_reports (
+        id TEXT PRIMARY KEY,
+        report_type TEXT,
+        content TEXT,
+        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_security_alerts (
+        id TEXT PRIMARY KEY,
+        network TEXT,
+        severity TEXT,
+        status TEXT DEFAULT 'open',
+        message TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     ];
 
@@ -466,8 +609,23 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_reinsurance_members_pool ON reinsurance_members(pool_id)',
       'CREATE INDEX IF NOT EXISTS idx_reinsurance_claims_pool ON reinsurance_claims(pool_id)',
       'CREATE INDEX IF NOT EXISTS idx_fraud_analyses_claim ON fraud_contract_analyses(claim_id)',
-      'CREATE INDEX IF NOT EXISTS idx_fraud_investigations_status ON fraud_investigations(status)'
-
+      'CREATE INDEX IF NOT EXISTS idx_fraud_investigations_status ON fraud_investigations(status)',
+      'CREATE INDEX IF NOT EXISTS idx_mlops_runs_pipeline ON mlops_runs(pipeline_id)',
+      'CREATE INDEX IF NOT EXISTS idx_mlops_deployments_model ON mlops_deployments(model_id)',
+      'CREATE INDEX IF NOT EXISTS idx_mlops_feedback_model ON mlops_feedback(model_id)',
+      'CREATE INDEX IF NOT EXISTS idx_mlops_drift_model ON mlops_drift_alerts(model_id)',
+      'CREATE INDEX IF NOT EXISTS idx_mlops_explain_model ON mlops_explainability(model_id)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_network_hash ON blockchain_transactions(network, tx_hash)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_from ON blockchain_transactions(from_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_to ON blockchain_transactions(to_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_contract ON blockchain_transactions(contract_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_risk ON blockchain_transactions(risk_level)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_created ON blockchain_transactions(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_contract_address ON blockchain_contract_analyses(network, contract_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_contract_risk ON blockchain_contract_analyses(risk_level)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_reports_generated ON blockchain_compliance_reports(generated_at)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_alerts_status_severity ON blockchain_security_alerts(status, severity)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_alerts_network ON blockchain_security_alerts(network)'
     ];
 
     let completedTables = 0;

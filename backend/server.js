@@ -41,6 +41,7 @@ const fileStorageRoutes = require('./routes/fileStorage');
 const encryptionRoutes = require('./routes/encryption');
 const jobsRoutes = require('./routes/jobs');
 const advancedSecurityRoutes = require('./routes/advancedSecurity');
+const mlopsRoutes = require('./routes/mlops');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -119,6 +120,7 @@ app.use('/api/files', fileStorageRoutes);
 app.use('/api/encryption', encryptionRoutes);
 app.use('/api/jobs', jobsRoutes);
 app.use('/api/advanced-security', advancedSecurityRoutes);
+app.use('/api/mlops', authenticateToken, mlopsRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
