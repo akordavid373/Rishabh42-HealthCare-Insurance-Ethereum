@@ -64,12 +64,34 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [contractAddress, setContractAddress] = useState(process.env.REACT_APP_CONTRACT_ADDRESS || '0x...');
 
-  // Contract addresses (would come from deployment.json)
-  const CONTRACT_ADDRESS = "0x..."; // Replace with actual address
+  const resolveContractAddress = async () => {
+    if (process.env.REACT_APP_CONTRACT_ADDRESS) {
+      return process.env.REACT_APP_CONTRACT_ADDRESS;
+    }
+
+    try {
+      const response = await fetch('/deployment.json', { cache: 'no-store' });
+      if (response.ok) {
+        const deployment = await response.json();
+        return deployment.contract_id || deployment.contract_address || '0x...';
+      }
+    } catch (error) {
+      console.warn('Unable to load deployment metadata:', error);
+    }
+
+    return '0x...';
+  };
 
   useEffect(() => {
-    connectWallet();
+    const initialize = async () => {
+      const resolvedContractAddress = await resolveContractAddress();
+      setContractAddress(resolvedContractAddress);
+      await connectWallet(resolvedContractAddress);
+    };
+
+    initialize();
     
     // Check if mobile device
     const checkMobile = () => {
@@ -85,14 +107,14 @@ function App() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  const connectWallet = async () => {
+  const connectWallet = async (resolvedContractAddress = contractAddress) => {
     try {
       const ethereumProvider = await detectEthereumProvider();
       if (ethereumProvider) {
         const accounts = await ethereumProvider.request({ method: 'eth_requestAccounts' });
         const provider = new ethers.providers.Web3Provider(ethereumProvider);
         const signer = provider.getSigner();
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, HEALTHCARE_DRIPS_ABI, signer);
+        const contract = new ethers.Contract(resolvedContractAddress, HEALTHCARE_DRIPS_ABI, signer);
         
         setAccount(accounts[0]);
         setProvider(provider);

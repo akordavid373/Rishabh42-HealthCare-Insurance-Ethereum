@@ -480,7 +480,18 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_reinsurance_members_pool ON reinsurance_members(pool_id)',
       'CREATE INDEX IF NOT EXISTS idx_reinsurance_claims_pool ON reinsurance_claims(pool_id)',
       'CREATE INDEX IF NOT EXISTS idx_fraud_analyses_claim ON fraud_contract_analyses(claim_id)',
-      'CREATE INDEX IF NOT EXISTS idx_fraud_investigations_status ON fraud_investigations(status)'
+      'CREATE INDEX IF NOT EXISTS idx_fraud_investigations_status ON fraud_investigations(status)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_network_hash ON blockchain_transactions(network, tx_hash)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_from ON blockchain_transactions(from_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_to ON blockchain_transactions(to_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_contract ON blockchain_transactions(contract_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_risk ON blockchain_transactions(risk_level)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_created ON blockchain_transactions(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_contract_address ON blockchain_contract_analyses(network, contract_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_contract_risk ON blockchain_contract_analyses(risk_level)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_reports_generated ON blockchain_compliance_reports(generated_at)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_alerts_status_severity ON blockchain_security_alerts(status, severity)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_alerts_network ON blockchain_security_alerts(network)'
 
     ];
 
