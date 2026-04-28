@@ -40,7 +40,8 @@ const treasuryRoutes = require('./routes/treasury');
 const dataVisualizationRoutes = require('./routes/dataVisualization');
 const reinsuranceRoutes = require('./routes/reinsurance');
 const fraudContractsRoutes = require('./routes/fraudContracts');
-const databaseOptimizationRoutes = require('./routes/databaseOptimization');
+const blockchainRoutes = require('./routes/blockchain');
+
 
 const { initializeDatabase } = require('./database/init');
 const { authenticateToken } = require('./middleware/auth');
@@ -116,6 +117,9 @@ app.use('/api/reinsurance', authenticateToken, reinsuranceRoutes);
 app.use('/api/fraud-contracts', authenticateToken, fraudContractsRoutes);
 app.use('/api/database-optimization', authenticateToken, databaseOptimizationRoutes);
 
+// ── Blockchain Integration Layer ─────────────────────────────────────────
+app.use('/api/blockchain', blockchainRoutes);
+
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
 app.use('/api/notifications/analytics',    authenticateToken, notificationAnalyticsRoutes);
@@ -174,6 +178,10 @@ async function startServer() {
   try {
     await initializeDatabase();
 
+    // Initialize blockchain integration layer
+    const blockchainLayer = require('./blockchain');
+    await blockchainLayer.initialize();
+
     // Initialise notification engine with the socket.io instance
     NotificationEngine.getInstance(io);
 
@@ -188,13 +196,14 @@ async function startServer() {
       // Start system monitoring
       startSystemMonitoring();
 
-      loggingService.info(`🔒 Advanced Security API enabled`);
-      loggingService.info(`📈 Performance monitoring active`);
-      loggingService.info(`🤖 AI Recommendation Engine enabled`);
-      loggingService.info(`📡 IoT Health Monitoring API enabled`);
-      loggingService.info(`🔗 Cross-Platform Integration Framework enabled`);
-      loggingService.info(`💳 Advanced Payment Processing API enabled`);
-      loggingService.info(`🏪 Insurance Marketplace Platform enabled`);
+      console.log(`🔒 Advanced Security API enabled`);
+      console.log(`📈 Performance monitoring active`);
+      console.log(`🤖 AI Recommendation Engine enabled`);
+      console.log(`📡 IoT Health Monitoring API enabled`);
+      console.log(`🔗 Cross-Platform Integration Framework enabled`);
+      console.log(`💳 Advanced Payment Processing API enabled`);
+      console.log(`🏪 Insurance Marketplace Platform enabled`);
+      console.log(`⛓️  Blockchain Integration Layer enabled`);
     });
   } catch (error) {
     loggingService.error('Failed to start server', error);
