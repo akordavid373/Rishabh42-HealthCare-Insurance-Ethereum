@@ -1,19 +1,22 @@
 #!/bin/bash
 
+set -u
+set -o pipefail
+
 # Healthcare Drips - Stellar Contract Deployment Script
 
 echo "🌟 Healthcare Drips - Stellar Contract Deployment"
 echo "=================================================="
 
 # Check if required environment variables are set
-if [ -z "$SECRET_KEY" ]; then
+if [ -z "${SECRET_KEY:-}" ]; then
     echo "❌ SECRET_KEY environment variable is not set"
     echo "Please set your Stellar secret key:"
     echo "export SECRET_KEY=your_secret_key"
     exit 1
 fi
 
-if [ -z "$PUBLIC_KEY" ]; then
+if [ -z "${PUBLIC_KEY:-}" ]; then
     echo "❌ PUBLIC_KEY environment variable is not set"
     echo "Please set your Stellar public key:"
     echo "export PUBLIC_KEY=your_public_key"
@@ -54,7 +57,11 @@ DEPLOY_OUTPUT=$(soroban contract deploy \
 
 if [ $? -eq 0 ]; then
     # Extract contract ID from output
-    CONTRACT_ID=$(echo "$DEPLOY_OUTPUT" | grep -o 'Contract ID: [a-zA-Z0-9]' | cut -d' ' -f3)
+    CONTRACT_ID=$(printf '%s\n' "$DEPLOY_OUTPUT" | grep -oE 'Contract ID: [[:alnum:]]+' | awk '{print $3}' | tail -n1)
+
+    if [ -z "$CONTRACT_ID" ]; then
+        CONTRACT_ID=$(printf '%s\n' "$DEPLOY_OUTPUT" | tail -n1 | tr -d '[:space:]')
+    fi
     
     if [ -z "$CONTRACT_ID" ]; then
         echo "❌ Could not extract contract ID from deployment output"

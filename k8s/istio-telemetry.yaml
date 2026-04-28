@@ -1,0 +1,31 @@
+apiVersion: telemetry.istio.io/v1alpha1
+kind: Telemetry
+metadata:
+  name: healthcare-telemetry
+  namespace: healthcare-insurance
+spec:
+  metrics:
+  - providers:
+    - name: prometheus
+  accessLogging:
+  - providers:
+    - name: envoy
+  tracing:
+  - providers:
+    - name: jaeger
+---
+apiVersion: v1
+kind: ServiceMonitor
+metadata:
+  name: healthcare-metrics
+  namespace: healthcare-insurance
+  labels:
+    app: healthcare-backend
+spec:
+  selector:
+    matchLabels:
+      app: healthcare-backend
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
