@@ -136,6 +136,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.get('/api/ready', (req, res) => {
+  res.json({ 
+    status: 'READY', 
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
