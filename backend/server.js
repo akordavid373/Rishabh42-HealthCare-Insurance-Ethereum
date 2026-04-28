@@ -40,9 +40,8 @@ const fraudContractsRoutes = require('./routes/fraudContracts');
 const fileStorageRoutes = require('./routes/fileStorage');
 const encryptionRoutes = require('./routes/encryption');
 const jobsRoutes = require('./routes/jobs');
-const backupRoutes = require('./routes/backup');
-const cacheRoutes = require('./routes/cache');
-const backupService = require('./services/backupService');
+const advancedSecurityRoutes = require('./routes/advancedSecurity');
+const blockchainAnalyticsRoutes = require('./routes/blockchainAnalytics');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -121,8 +120,7 @@ app.use('/api/files', fileStorageRoutes);
 app.use('/api/encryption', encryptionRoutes);
 app.use('/api/jobs', jobsRoutes);
 app.use('/api/advanced-security', advancedSecurityRoutes);
-app.use('/api/backup', backupRoutes);
-app.use('/api/cache', cacheRoutes);
+app.use('/api/blockchain-analytics', authenticateToken, blockchainAnalyticsRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
@@ -193,6 +191,7 @@ async function startServer() {
       console.log(`🔗 Cross-Platform Integration Framework enabled`);
       console.log(`💳 Advanced Payment Processing API enabled`);
       console.log(`🏪 Insurance Marketplace Platform enabled`);
+      console.log(`⛓️ Blockchain Analytics API enabled`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);

@@ -433,6 +433,91 @@ function initializeDatabase() {
         resolution TEXT,
         opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         resolved_at DATETIME
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_transactions (
+        id TEXT PRIMARY KEY,
+        network TEXT NOT NULL,
+        tx_hash TEXT NOT NULL,
+        from_address TEXT,
+        to_address TEXT,
+        contract_address TEXT,
+        asset_code TEXT,
+        amount REAL DEFAULT 0,
+        fee REAL DEFAULT 0,
+        status TEXT DEFAULT 'pending',
+        tx_type TEXT DEFAULT 'transfer',
+        block_number INTEGER,
+        ledger_sequence INTEGER,
+        confirmation_time_ms INTEGER,
+        risk_score INTEGER DEFAULT 0,
+        risk_level TEXT DEFAULT 'low' CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
+        metadata TEXT DEFAULT '{}',
+        monitored_at DATETIME,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(network, tx_hash)
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_contract_analyses (
+        analysis_id TEXT PRIMARY KEY,
+        network TEXT NOT NULL,
+        contract_address TEXT NOT NULL,
+        contract_name TEXT,
+        security_score INTEGER NOT NULL,
+        risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
+        findings TEXT DEFAULT '[]',
+        metrics TEXT DEFAULT '{}',
+        compliance_flags TEXT DEFAULT '{}',
+        recommendations TEXT DEFAULT '[]',
+        metadata TEXT DEFAULT '{}',
+        analyzed_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_compliance_reports (
+        report_id TEXT PRIMARY KEY,
+        report_type TEXT NOT NULL,
+        framework TEXT,
+        period_start DATETIME,
+        period_end DATETIME,
+        summary TEXT DEFAULT '{}',
+        findings TEXT DEFAULT '[]',
+        recommendations TEXT DEFAULT '[]',
+        generated_by TEXT,
+        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_security_alerts (
+        alert_id TEXT PRIMARY KEY,
+        alert_type TEXT NOT NULL,
+        severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+        network TEXT,
+        tx_hash TEXT,
+        contract_address TEXT,
+        address TEXT,
+        message TEXT NOT NULL,
+        evidence TEXT DEFAULT '{}',
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        resolved_at DATETIME
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_documentation (
+        doc_id TEXT PRIMARY KEY,
+        doc_type TEXT NOT NULL,
+        format TEXT NOT NULL,
+        content TEXT,
+        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        generated_by TEXT
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS blockchain_suspicious_addresses (
+        address TEXT PRIMARY KEY,
+        network TEXT,
+        reason TEXT,
+        severity TEXT DEFAULT 'high' CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+        metadata TEXT DEFAULT '{}',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     ];
 
@@ -466,7 +551,18 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_reinsurance_members_pool ON reinsurance_members(pool_id)',
       'CREATE INDEX IF NOT EXISTS idx_reinsurance_claims_pool ON reinsurance_claims(pool_id)',
       'CREATE INDEX IF NOT EXISTS idx_fraud_analyses_claim ON fraud_contract_analyses(claim_id)',
-      'CREATE INDEX IF NOT EXISTS idx_fraud_investigations_status ON fraud_investigations(status)'
+      'CREATE INDEX IF NOT EXISTS idx_fraud_investigations_status ON fraud_investigations(status)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_network_hash ON blockchain_transactions(network, tx_hash)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_from ON blockchain_transactions(from_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_to ON blockchain_transactions(to_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_contract ON blockchain_transactions(contract_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_risk ON blockchain_transactions(risk_level)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_tx_created ON blockchain_transactions(created_at)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_contract_address ON blockchain_contract_analyses(network, contract_address)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_contract_risk ON blockchain_contract_analyses(risk_level)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_reports_generated ON blockchain_compliance_reports(generated_at)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_alerts_status_severity ON blockchain_security_alerts(status, severity)',
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_alerts_network ON blockchain_security_alerts(network)'
 
     ];
 
