@@ -1,0 +1,42 @@
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication
+metadata:
+  name: healthcare-peer-auth
+  namespace: healthcare-insurance
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: healthcare-authz
+  namespace: healthcare-insurance
+spec:
+  selector:
+    matchLabels:
+      app: healthcare-backend
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/healthcare-insurance/sa/healthcare-sa"]
+  - to:
+    - operation:
+        methods: ["GET", "POST", "PUT", "DELETE"]
+---
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: healthcare-frontend-authz
+  namespace: healthcare-insurance
+spec:
+  selector:
+    matchLabels:
+      app: healthcare-frontend
+  rules:
+  - from:
+    - source:
+        principals: ["cluster.local/ns/istio-system/sa/istio-ingressgateway-service-account"]
+  - to:
+    - operation:
+        methods: ["GET"]
