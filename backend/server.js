@@ -37,12 +37,7 @@ const treasuryRoutes = require('./routes/treasury');
 const dataVisualizationRoutes = require('./routes/dataVisualization');
 const reinsuranceRoutes = require('./routes/reinsurance');
 const fraudContractsRoutes = require('./routes/fraudContracts');
-const fileStorageRoutes = require('./routes/fileStorage');
-const encryptionRoutes = require('./routes/encryption');
-const jobsRoutes = require('./routes/jobs');
-const advancedSecurityRoutes = require('./routes/advancedSecurity');
-const blockchainAnalyticsRoutes = require('./routes/blockchainAnalytics');
-
+const databaseOptimizationRoutes = require('./routes/databaseOptimization');
 
 const { initializeDatabase } = require('./database/init');
 const { authenticateToken } = require('./middleware/auth');
@@ -116,11 +111,7 @@ app.use('/api/treasury', authenticateToken, treasuryRoutes);
 app.use('/api/visualization', authenticateToken, dataVisualizationRoutes);
 app.use('/api/reinsurance', authenticateToken, reinsuranceRoutes);
 app.use('/api/fraud-contracts', authenticateToken, fraudContractsRoutes);
-app.use('/api/files', fileStorageRoutes);
-app.use('/api/encryption', encryptionRoutes);
-app.use('/api/jobs', jobsRoutes);
-app.use('/api/advanced-security', advancedSecurityRoutes);
-app.use('/api/blockchain-analytics', authenticateToken, blockchainAnalyticsRoutes);
+app.use('/api/database-optimization', authenticateToken, databaseOptimizationRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
