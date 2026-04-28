@@ -8,6 +8,9 @@ const { createServer } = require('http');
 const { Server } = require('socket.io');
 require('dotenv').config();
 
+const loggingService = require('./services/loggingService');
+const monitoringService = require('./services/monitoringService');
+
 const authRoutes = require('./routes/auth');
 const patientRoutes = require('./routes/patients');
 const medicalRecordsRoutes = require('./routes/medicalRecords');
@@ -68,7 +71,7 @@ const limiter = rateLimit({
 
 app.use(helmet());
 app.use(compression());
-app.use(morgan('combined'));
+app.use(monitoringService.metricsMiddleware());
 app.use(limiter);
 app.use(cors({
   origin: process.env.FRONTEND_URL || "http://localhost:3000",
@@ -127,16 +130,17 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/api/ready', (req, res) => {
-  res.json({ 
-    status: 'READY', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
+app.get('/api/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    res.end(await monitoringService.getMetrics());
+  } catch (error) {
+    res.status(500).end(error.message);
+  }
 });
 
 io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+  loggingService.info(`Client connected: ${socket.id}`);
 
   // Legacy patient room (kept for backward compatibility)
   socket.on('join-patient-room', (patientId) => {
@@ -160,7 +164,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+    loggingService.info(`Client disconnected: ${socket.id}`);
   });
 });
 
@@ -174,8 +178,9 @@ async function startServer() {
     NotificationEngine.getInstance(io);
 
     server.listen(PORT, () => {
-      console.log(`🚀 Healthcare API Server running on port ${PORT}`);
-      console.log(`📊 Dashboard available at: http://localhost:${PORT}/api/health`);
+      loggingService.info(`🚀 Healthcare API Server running on port ${PORT}`);
+      loggingService.info(`📊 Dashboard available at: http://localhost:${PORT}/api/health`);
+      loggingService.info(`📈 Prometheus metrics at: http://localhost:${PORT}/api/metrics`);
 
       // Start queue processor after server is listening
       QueueProcessor.getInstance().start();
@@ -183,29 +188,29 @@ async function startServer() {
       // Start system monitoring
       startSystemMonitoring();
 
-      console.log(`🔒 Advanced Security API enabled`);
-      console.log(`📈 Performance monitoring active`);
-      console.log(`🤖 AI Recommendation Engine enabled`);
-      console.log(`📡 IoT Health Monitoring API enabled`);
-      console.log(`🔗 Cross-Platform Integration Framework enabled`);
-      console.log(`💳 Advanced Payment Processing API enabled`);
-      console.log(`🏪 Insurance Marketplace Platform enabled`);
-      console.log(`⛓️ Blockchain Analytics API enabled`);
+      loggingService.info(`🔒 Advanced Security API enabled`);
+      loggingService.info(`📈 Performance monitoring active`);
+      loggingService.info(`🤖 AI Recommendation Engine enabled`);
+      loggingService.info(`📡 IoT Health Monitoring API enabled`);
+      loggingService.info(`🔗 Cross-Platform Integration Framework enabled`);
+      loggingService.info(`💳 Advanced Payment Processing API enabled`);
+      loggingService.info(`🏪 Insurance Marketplace Platform enabled`);
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    loggingService.error('Failed to start server', error);
     process.exit(1);
   }
 }
 
 // Graceful shutdown — stop queue processor before exit
 process.on('SIGTERM', () => {
-  console.log('SIGTERM received — shutting down gracefully');
+  loggingService.info('SIGTERM received — shutting down gracefully');
   QueueProcessor.getInstance().stop();
   server.close(() => process.exit(0));
 });
 
 process.on('SIGINT', () => {
+  loggingService.info('SIGINT received — shutting down gracefully');
   QueueProcessor.getInstance().stop();
   server.close(() => process.exit(0));
 });
@@ -246,25 +251,13 @@ function startSystemMonitoring() {
         0  // error count
       );
     } catch (error) {
-      console.error('Error collecting AI system metrics:', error);
+      loggingService.error('Error collecting AI system metrics', error);
     }
   }, 30000);
 
-  // Scheduled daily backup at 2:00 AM (simulated here with a 24h interval)
-  setInterval(async () => {
-    try {
-      console.log('Running scheduled daily backup...');
-      const result = await backupService.performBackup();
-      await backupService.replicateToRemoteRegion(result.path);
-      console.log(`Scheduled backup completed and replicated: ${result.fileName}`);
-    } catch (error) {
-      console.error('Error during scheduled backup:', error);
-    }
-  }, 86400000); // 24 hours
-
-  console.log('🔍 System monitoring started');
-  console.log('🛡️  Threat intelligence updates scheduled');
-  console.log('🤖 AI performance monitoring started');
+  loggingService.info('🔍 System monitoring started');
+  loggingService.info('🛡️  Threat intelligence updates scheduled');
+  loggingService.info('🤖 AI performance monitoring started');
 }
 
 startServer();

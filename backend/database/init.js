@@ -434,90 +434,19 @@ function initializeDatabase() {
         opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         resolved_at DATETIME
       )`,
-
-      `CREATE TABLE IF NOT EXISTS blockchain_transactions (
+      
+      `CREATE TABLE IF NOT EXISTS system_logs (
         id TEXT PRIMARY KEY,
-        network TEXT NOT NULL,
-        tx_hash TEXT NOT NULL,
-        from_address TEXT,
-        to_address TEXT,
-        contract_address TEXT,
-        asset_code TEXT,
-        amount REAL DEFAULT 0,
-        fee REAL DEFAULT 0,
-        status TEXT DEFAULT 'pending',
-        tx_type TEXT DEFAULT 'transfer',
-        block_number INTEGER,
-        ledger_sequence INTEGER,
-        confirmation_time_ms INTEGER,
-        risk_score INTEGER DEFAULT 0,
-        risk_level TEXT DEFAULT 'low' CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
-        metadata TEXT DEFAULT '{}',
-        monitored_at DATETIME,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(network, tx_hash)
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS blockchain_contract_analyses (
-        analysis_id TEXT PRIMARY KEY,
-        network TEXT NOT NULL,
-        contract_address TEXT NOT NULL,
-        contract_name TEXT,
-        security_score INTEGER NOT NULL,
-        risk_level TEXT NOT NULL CHECK (risk_level IN ('low', 'medium', 'high', 'critical')),
-        findings TEXT DEFAULT '[]',
-        metrics TEXT DEFAULT '{}',
-        compliance_flags TEXT DEFAULT '{}',
-        recommendations TEXT DEFAULT '[]',
-        metadata TEXT DEFAULT '{}',
-        analyzed_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS blockchain_compliance_reports (
-        report_id TEXT PRIMARY KEY,
-        report_type TEXT NOT NULL,
-        framework TEXT,
-        period_start DATETIME,
-        period_end DATETIME,
-        summary TEXT DEFAULT '{}',
-        findings TEXT DEFAULT '[]',
-        recommendations TEXT DEFAULT '[]',
-        generated_by TEXT,
-        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS blockchain_security_alerts (
-        alert_id TEXT PRIMARY KEY,
-        alert_type TEXT NOT NULL,
-        severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
-        network TEXT,
-        tx_hash TEXT,
-        contract_address TEXT,
-        address TEXT,
+        level TEXT NOT NULL,
         message TEXT NOT NULL,
-        evidence TEXT DEFAULT '{}',
-        status TEXT DEFAULT 'active',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        resolved_at DATETIME
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS blockchain_documentation (
-        doc_id TEXT PRIMARY KEY,
-        doc_type TEXT NOT NULL,
-        format TEXT NOT NULL,
-        content TEXT,
-        generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        generated_by TEXT
-      )`,
-
-      `CREATE TABLE IF NOT EXISTS blockchain_suspicious_addresses (
-        address TEXT PRIMARY KEY,
-        network TEXT,
-        reason TEXT,
-        severity TEXT DEFAULT 'high' CHECK (severity IN ('low', 'medium', 'high', 'critical')),
-        metadata TEXT DEFAULT '{}',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        context TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        source TEXT,
+        user_id INTEGER,
+        ip_address TEXT,
+        user_agent TEXT,
+        compliance_relevant BOOLEAN DEFAULT FALSE,
+        FOREIGN KEY (user_id) REFERENCES users (id)
       )`
     ];
 

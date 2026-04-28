@@ -1,5 +1,11 @@
+const loggingService = require('../services/loggingService');
+
 const errorHandler = (err, req, res, next) => {
-  console.error('Error:', err);
+  loggingService.error('Unhandled error', err, {
+    path: req.path,
+    method: req.method,
+    ip: req.ip
+  });
 
   if (err.name === 'ValidationError') {
     return res.status(400).json({
