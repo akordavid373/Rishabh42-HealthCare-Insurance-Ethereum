@@ -40,7 +40,9 @@ const fraudContractsRoutes = require('./routes/fraudContracts');
 const fileStorageRoutes = require('./routes/fileStorage');
 const encryptionRoutes = require('./routes/encryption');
 const jobsRoutes = require('./routes/jobs');
-const advancedSecurityRoutes = require('./routes/advancedSecurity');
+const backupRoutes = require('./routes/backup');
+const cacheRoutes = require('./routes/cache');
+const backupService = require('./services/backupService');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -119,6 +121,8 @@ app.use('/api/files', fileStorageRoutes);
 app.use('/api/encryption', encryptionRoutes);
 app.use('/api/jobs', jobsRoutes);
 app.use('/api/advanced-security', advancedSecurityRoutes);
+app.use('/api/backup', backupRoutes);
+app.use('/api/cache', cacheRoutes);
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
@@ -247,6 +251,18 @@ function startSystemMonitoring() {
       console.error('Error collecting AI system metrics:', error);
     }
   }, 30000);
+
+  // Scheduled daily backup at 2:00 AM (simulated here with a 24h interval)
+  setInterval(async () => {
+    try {
+      console.log('Running scheduled daily backup...');
+      const result = await backupService.performBackup();
+      await backupService.replicateToRemoteRegion(result.path);
+      console.log(`Scheduled backup completed and replicated: ${result.fileName}`);
+    } catch (error) {
+      console.error('Error during scheduled backup:', error);
+    }
+  }, 86400000); // 24 hours
 
   console.log('🔍 System monitoring started');
   console.log('🛡️  Threat intelligence updates scheduled');

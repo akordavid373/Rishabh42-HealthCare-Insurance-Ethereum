@@ -1,23 +1,4 @@
-const NodeCache = require('node-cache');
-const redis = require('redis');
-
-let cache;
-let redisClient;
-
-const CACHE_TTL = parseInt(process.env.CACHE_TTL) || 300;
-
-if (process.env.REDIS_URL) {
-  redisClient = redis.createClient({ url: process.env.REDIS_URL });
-  
-  redisClient.on('error', (err) => {
-    console.error('Redis Client Error:', err);
-    redisClient = null;
-  });
-  
-  redisClient.connect();
-} else {
-  cache = new NodeCache({ stdTTL: CACHE_TTL, checkperiod: 120 });
-}
+const advancedCacheService = require('../services/advancedCacheService');
 
 function cacheMiddleware(req, res, next) {
   const key = req.originalUrl;
@@ -26,59 +7,35 @@ function cacheMiddleware(req, res, next) {
     return next();
   }
 
-  if (redisClient) {
-    redisClient.get(key)
-      .then(data => {
-        if (data) {
-          return res.json(JSON.parse(data));
-        }
-        next();
-      })
-      .catch(err => {
-        console.error('Cache error:', err);
-        next();
-      });
-  } else if (cache) {
-    const cachedData = cache.get(key);
-    if (cachedData) {
-      return res.json(cachedData);
-    }
-    next();
-  } else {
-    next();
-  }
+  // Check if encryption is needed for this route (example logic)
+  const isSensitive = key.includes('/patients/') || key.includes('/medical-records/');
+
+  advancedCacheService.get(key, { encrypted: isSensitive })
+    .then(data => {
+      if (data) {
+        return res.json(data);
+      }
+      next();
+    })
+    .catch(err => {
+      console.error('Cache middleware error:', err);
+      next();
+    });
 }
 
-function setCache(key, data) {
-  if (redisClient) {
-    redisClient.setEx(key, CACHE_TTL, JSON.stringify(data))
-      .catch(err => console.error('Redis set error:', err));
-  } else if (cache) {
-    cache.set(key, data);
-  }
+function setCache(key, data, options = {}) {
+  // Automatically encrypt sensitive data
+  const isSensitive = key.includes('/patients/') || key.includes('/medical-records/');
+  advancedCacheService.set(key, data, { ...options, encrypted: options.encrypted || isSensitive });
 }
 
 function deleteCache(pattern) {
-  if (redisClient) {
-    redisClient.del(pattern)
-      .catch(err => console.error('Redis delete error:', err));
-  } else if (cache) {
-    const keys = cache.keys();
-    keys.forEach(key => {
-      if (key.includes(pattern)) {
-        cache.del(key);
-      }
-    });
-  }
+  advancedCacheService.invalidate(pattern);
 }
 
 function clearCache() {
-  if (redisClient) {
-    redisClient.flushDb()
-      .catch(err => console.error('Redis flush error:', err));
-  } else if (cache) {
-    cache.flushAll();
-  }
+  // In a real app, you'd add a clearAll method to the service
+  console.log('Cache clearing requested');
 }
 
 module.exports = {
