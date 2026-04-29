@@ -37,6 +37,10 @@ const treasuryRoutes = require('./routes/treasury');
 const dataVisualizationRoutes = require('./routes/dataVisualization');
 const reinsuranceRoutes = require('./routes/reinsurance');
 const fraudContractsRoutes = require('./routes/fraudContracts');
+const apiMonitoringRoutes = require('./routes/apiMonitoring');
+const emailServiceRoutes = require('./routes/emailService');
+const realTimeProcessingRoutes = require('./routes/realTimeProcessing');
+const { router: advancedRateLimitingRoutes, rateLimitMiddleware } = require('./routes/advancedRateLimiting');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -46,6 +50,9 @@ const { errorHandler } = require('./middleware/errorHandler');
 const performanceMonitoringService = require('./services/performanceMonitoringService');
 const threatIntelligenceService = require('./services/threatIntelligenceService');
 const aiPerformanceMonitoringService = require('./services/aiPerformanceMonitoringService');
+const emailService = require('./services/emailService');
+const realTimeProcessingService = require('./services/realTimeProcessingService');
+const advancedRateLimitingService = require('./services/advancedRateLimitingService');
 
 const app = express();
 const server = createServer(app);
@@ -111,12 +118,26 @@ app.use('/api/treasury', authenticateToken, treasuryRoutes);
 app.use('/api/visualization', authenticateToken, dataVisualizationRoutes);
 app.use('/api/reinsurance', authenticateToken, reinsuranceRoutes);
 app.use('/api/fraud-contracts', authenticateToken, fraudContractsRoutes);
+app.use('/api/monitoring', authenticateToken, apiMonitoringRoutes);
+app.use('/api/email', authenticateToken, emailServiceRoutes);
+app.use('/api/realtime', authenticateToken, realTimeProcessingRoutes);
+app.use('/api/rate-limiting', authenticateToken, advancedRateLimitingRoutes);
+
+// Apply advanced rate limiting middleware to all API routes
+app.use('/api', rateLimitMiddleware({
+  // Default rate limiting options
+  globalLimit: 1000, // 1000 requests per hour globally
+  userLimit: 100,    // 100 requests per hour per user
+  endpointLimit: 50  // 50 requests per hour per endpoint
+}));
+
+// Apply performance monitoring middleware to all API routes
+app.use('/api', performanceMonitoringService.apiPerformanceMiddleware());
 
 // ── Notification system ──────────────────────────────────────────────────
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
 app.use('/api/notifications/analytics',    authenticateToken, notificationAnalyticsRoutes);
 app.use('/api/notifications',              authenticateToken, notificationsRoutes);
-
 
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -181,6 +202,9 @@ async function startServer() {
       console.log(`🔗 Cross-Platform Integration Framework enabled`);
       console.log(`💳 Advanced Payment Processing API enabled`);
       console.log(`🏪 Insurance Marketplace Platform enabled`);
+      console.log(`📧 Email Service Integration enabled`);
+      console.log(`🔄 Real-time Data Processing Pipeline active`);
+      console.log(`🔒 Advanced Rate Limiting and Throttling enabled`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
