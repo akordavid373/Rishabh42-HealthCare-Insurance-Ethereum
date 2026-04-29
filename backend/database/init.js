@@ -447,6 +447,27 @@ function initializeDatabase() {
         user_agent TEXT,
         compliance_relevant BOOLEAN DEFAULT FALSE,
         FOREIGN KEY (user_id) REFERENCES users (id)
+      )`,
+      
+      `CREATE TABLE IF NOT EXISTS audit_logs (
+        id TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        resource TEXT NOT NULL,
+        resource_id TEXT,
+        user_id INTEGER,
+        user_email TEXT,
+        user_role TEXT,
+        ip_address TEXT,
+        user_agent TEXT,
+        previous_state TEXT,
+        new_state TEXT,
+        changes TEXT,
+        status TEXT CHECK (status IN ('success', 'failure')),
+        error_message TEXT,
+        metadata TEXT DEFAULT '{}',
+        checksum TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users (id)
       )`
     ];
 
@@ -491,7 +512,10 @@ function initializeDatabase() {
       'CREATE INDEX IF NOT EXISTS idx_blockchain_contract_risk ON blockchain_contract_analyses(risk_level)',
       'CREATE INDEX IF NOT EXISTS idx_blockchain_reports_generated ON blockchain_compliance_reports(generated_at)',
       'CREATE INDEX IF NOT EXISTS idx_blockchain_alerts_status_severity ON blockchain_security_alerts(status, severity)',
-      'CREATE INDEX IF NOT EXISTS idx_blockchain_alerts_network ON blockchain_security_alerts(network)'
+      'CREATE INDEX IF NOT EXISTS idx_blockchain_alerts_network ON blockchain_security_alerts(network)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_logs_timestamp ON audit_logs(timestamp)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_logs_user_id ON audit_logs(user_id)',
+      'CREATE INDEX IF NOT EXISTS idx_audit_logs_resource ON audit_logs(resource, resource_id)'
 
     ];
 

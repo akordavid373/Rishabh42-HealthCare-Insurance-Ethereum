@@ -2,6 +2,7 @@ const express = require('express');
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const { setCache, deleteCache } = require('../middleware/cache');
+const auditService = require('../services/auditService');
 
 const router = express.Router();
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, '../database/healthcare.db');
@@ -153,7 +154,17 @@ router.put('/:patientId', async (req, res, next) => {
   
   const db = getDatabase();
   
-  try {
+    // 1. Get previous state
+    const previousState = await new Promise((resolve, reject) => {
+      db.get('SELECT * FROM patients WHERE id = ?', [patientId], (err, row) => {
+        if (err) reject(err); else resolve(row);
+      });
+    });
+
+    if (!previousState) {
+      return res.status(404).json({ error: 'Patient not found' });
+    }
+
     const setClause = Object.keys(updateFields)
       .map(key => `${key} = ?`)
       .join(', ');
@@ -167,7 +178,7 @@ router.put('/:patientId', async (req, res, next) => {
       WHERE id = ?
     `);
     
-    stmt.run(values, function(err) {
+    stmt.run(values, async function(err) {
       if (err) {
         return next(err);
       }
@@ -175,6 +186,28 @@ router.put('/:patientId', async (req, res, next) => {
       if (this.changes === 0) {
         return res.status(404).json({ error: 'Patient not found' });
       }
+
+      // 2. Get new state
+      const newState = await new Promise((resolve, reject) => {
+        db.get('SELECT * FROM patients WHERE id = ?', [patientId], (err, row) => {
+          if (err) reject(err); else resolve(row);
+        });
+      });
+
+      // 3. Log audit event with data change tracking
+      await auditService.log({
+        action: 'UPDATE_PATIENT_PROFILE',
+        resource: 'patients',
+        resource_id: patientId,
+        user_id: req.user ? req.user.id : null,
+        user_email: req.user ? req.user.email : null,
+        ip_address: req.ip,
+        previous_state: previousState,
+        new_state: newState,
+        metadata: {
+          updated_fields: Object.keys(updateFields)
+        }
+      });
       
       deleteCache('/api/patients');
       deleteCache(`/api/patients/${patientId}`);

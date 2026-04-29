@@ -41,6 +41,9 @@ const dataVisualizationRoutes = require('./routes/dataVisualization');
 const reinsuranceRoutes = require('./routes/reinsurance');
 const fraudContractsRoutes = require('./routes/fraudContracts');
 const blockchainRoutes = require('./routes/blockchain');
+const databaseOptimizationRoutes = require('./routes/databaseOptimization');
+const auditRoutes = require('./routes/auditRoutes');
+const auditMiddleware = require('./middleware/auditMiddleware');
 
 
 const { initializeDatabase } = require('./database/init');
@@ -80,6 +83,7 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+app.use(auditMiddleware({ logReads: false }));
 
 // Add performance monitoring middleware
 app.use(performanceMonitoringService.apiPerformanceMiddleware());
@@ -116,6 +120,7 @@ app.use('/api/visualization', authenticateToken, dataVisualizationRoutes);
 app.use('/api/reinsurance', authenticateToken, reinsuranceRoutes);
 app.use('/api/fraud-contracts', authenticateToken, fraudContractsRoutes);
 app.use('/api/database-optimization', authenticateToken, databaseOptimizationRoutes);
+app.use('/api/audit', auditRoutes);
 
 // ── Blockchain Integration Layer ─────────────────────────────────────────
 app.use('/api/blockchain', blockchainRoutes);
@@ -267,6 +272,16 @@ function startSystemMonitoring() {
   loggingService.info('🔍 System monitoring started');
   loggingService.info('🛡️  Threat intelligence updates scheduled');
   loggingService.info('🤖 AI performance monitoring started');
+
+  // Apply audit log retention policy daily
+  setInterval(async () => {
+    try {
+      const auditService = require('./services/auditService');
+      await auditService.applyRetentionPolicy(90); // Keep logs for 90 days
+    } catch (error) {
+      console.error('Error applying audit retention policy:', error);
+    }
+  }, 24 * 60 * 60 * 1000);
 }
 
 startServer();
