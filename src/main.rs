@@ -1,8 +1,12 @@
 use soroban_sdk::{contractimpl, Address, Env, Symbol};
 
 use crate::healthcare_drips::HealthcareDrips;
+use crate::real_time_processing::RealTimeProcessor;
+use crate::rate_limiting::RateLimiter;
 
 mod healthcare_drips;
+mod real_time_processing;
+mod rate_limiting;
 
 #[contractimpl]
 impl HealthcareDrips {

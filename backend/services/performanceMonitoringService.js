@@ -906,6 +906,231 @@ class PerformanceMonitoringService {
     });
   }
 
+  // Acknowledge alert
+  async acknowledgeAlert(alertId, userId, notes = null) {
+    const db = this.getDatabase();
+    
+    return new Promise((resolve, reject) => {
+      const query = `
+        UPDATE performance_alerts 
+        SET status = 'acknowledged', acknowledged_by = ?, resolved_at = CURRENT_TIMESTAMP
+        WHERE id = ? AND status = 'active'
+      `;
+      
+      db.run(query, [userId, alertId], function(err) {
+        if (err) {
+          reject(err);
+        } else if (this.changes === 0) {
+          reject(new Error('Alert not found or already acknowledged'));
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
+
+  // Create custom alert threshold
+  async createCustomThreshold(metricName, thresholdValue, severity, condition, description, userId) {
+    const db = this.getDatabase();
+    
+    try {
+      // First ensure the custom thresholds table exists
+      await this.createCustomThresholdsTable();
+      
+      const thresholdId = uuidv4();
+      
+      return new Promise((resolve, reject) => {
+        const query = `
+          INSERT INTO custom_alert_thresholds 
+          (id, metric_name, threshold_value, severity, condition, description, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `;
+        
+        db.run(query, [
+          thresholdId,
+          metricName,
+          thresholdValue,
+          severity,
+          condition,
+          description || null,
+          userId
+        ], function(err) {
+          if (err) {
+            reject(err);
+          } else {
+            resolve(thresholdId);
+          }
+        });
+      });
+    } catch (error) {
+      console.error('Error creating custom threshold:', error);
+      throw error;
+    }
+  }
+
+  // Create custom thresholds table
+  async createCustomThresholdsTable() {
+    const db = this.getDatabase();
+    
+    const table = `
+      CREATE TABLE IF NOT EXISTS custom_alert_thresholds (
+        id TEXT PRIMARY KEY,
+        metric_name TEXT NOT NULL,
+        threshold_value REAL NOT NULL,
+        severity TEXT NOT NULL,
+        condition TEXT NOT NULL,
+        description TEXT,
+        created_by INTEGER NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        is_active BOOLEAN DEFAULT 1,
+        FOREIGN KEY (created_by) REFERENCES users (id)
+      )
+    `;
+    
+    return new Promise((resolve, reject) => {
+      db.run(table, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
+  }
+
+  // Get custom thresholds
+  async getCustomThresholds() {
+    const db = this.getDatabase();
+    
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT * FROM custom_alert_thresholds 
+        WHERE is_active = 1 
+        ORDER BY created_at DESC
+      `;
+      
+      db.all(query, [], (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+  }
+
+  // Check custom thresholds
+  async checkCustomThresholds(metricType, metricName, value) {
+    const thresholds = await this.getCustomThresholds();
+    
+    for (const threshold of thresholds) {
+      if (threshold.metric_name === metricName) {
+        let shouldAlert = false;
+        
+        switch (threshold.condition) {
+          case 'greater_than':
+            shouldAlert = value > threshold.threshold_value;
+            break;
+          case 'less_than':
+            shouldAlert = value < threshold.threshold_value;
+            break;
+          case 'equals':
+            shouldAlert = Math.abs(value - threshold.threshold_value) < 0.001;
+            break;
+        }
+        
+        if (shouldAlert) {
+          await this.createPerformanceAlert(
+            metricType,
+            metricName,
+            threshold.severity,
+            threshold.threshold_value,
+            value,
+            { custom_threshold: threshold.id }
+          );
+        }
+      }
+    }
+  }
+
+  // Enhanced metric recording with custom threshold checking
+  async recordMetricEnhanced(metricType, metricName, value, unit, tags = {}, source = 'system', context = {}) {
+    const metricId = await this.recordMetric(metricType, metricName, value, unit, tags, source, context);
+    
+    // Check custom thresholds
+    await this.checkCustomThresholds(metricType, metricName, value);
+    
+    return metricId;
+  }
+
+  // Get performance trends
+  async getPerformanceTrends(metricName, period = 24, interval = 'hour') {
+    const db = this.getDatabase();
+    
+    const cutoffDate = new Date();
+    cutoffDate.setHours(cutoffDate.getHours() - period);
+    
+    let groupBy;
+    switch (interval) {
+      case 'hour':
+        groupBy = "strftime('%H', timestamp)";
+        break;
+      case 'day':
+        groupBy = "strftime('%Y-%m-%d', timestamp)";
+        break;
+      case 'minute':
+        groupBy = "strftime('%H:%M', timestamp)";
+        break;
+      default:
+        groupBy = "strftime('%H', timestamp)";
+    }
+    
+    return new Promise((resolve, reject) => {
+      const query = `
+        SELECT 
+          ${groupBy} as time_group,
+          AVG(metric_value) as avg_value,
+          MIN(metric_value) as min_value,
+          MAX(metric_value) as max_value,
+          COUNT(*) as data_points
+        FROM performance_metrics
+        WHERE metric_name = ? AND timestamp >= ?
+        GROUP BY ${groupBy}
+        ORDER BY time_group
+      `;
+      
+      db.all(query, [metricName, cutoffDate.toISOString()], (err, rows) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(rows);
+        }
+      });
+    });
+  }
+
+  // Get system health summary
+  async getSystemHealthSummary() {
+    try {
+      const stats = await this.getPerformanceStats(1); // Last hour
+      const alerts = await this.getAlerts('active', null, 10);
+      
+      const healthScore = calculateHealthScore(stats);
+      const status = healthScore >= 90 ? 'healthy' : 
+                    healthScore >= 70 ? 'warning' : 
+                    healthScore >= 50 ? 'critical' : 'unhealthy';
+      
+      return {
+        status,
+        health_score: healthScore,
+        active_alerts: alerts.length,
+        critical_alerts: alerts.filter(a => a.severity === 'critical').length,
+        api_performance: stats.api_performance.performance_level,
+        last_updated: new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Error getting system health summary:', error);
+      throw error;
+    }
+  }
+
   // Close database connection
   close() {
     if (this.db) {
@@ -913,6 +1138,32 @@ class PerformanceMonitoringService {
       this.db = null;
     }
   }
+}
+
+// Helper function for health score calculation
+function calculateHealthScore(stats) {
+  let score = 100;
+  
+  // Deduct points for poor API performance
+  if (stats.api_performance.avg_response_time > 1000) score -= 30;
+  else if (stats.api_performance.avg_response_time > 500) score -= 15;
+  else if (stats.api_performance.avg_response_time > 200) score -= 5;
+  
+  // Deduct points for high error rate
+  if (stats.api_performance.error_rate > 5) score -= 40;
+  else if (stats.api_performance.error_rate > 2) score -= 20;
+  else if (stats.api_performance.error_rate > 1) score -= 10;
+  
+  // Deduct points for critical alerts
+  if (stats.alerts.critical_alerts > 0) score -= stats.alerts.critical_alerts * 20;
+  
+  // Deduct points for poor system resources
+  Object.entries(stats.system_resources).forEach(([resource, data]) => {
+    if (data.status === 'critical') score -= 15;
+    else if (data.status === 'poor') score -= 5;
+  });
+  
+  return Math.max(0, score);
 }
 
 module.exports = new PerformanceMonitoringService();

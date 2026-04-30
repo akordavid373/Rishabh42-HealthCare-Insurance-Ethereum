@@ -50,6 +50,9 @@ const { errorHandler } = require('./middleware/errorHandler');
 const performanceMonitoringService = require('./services/performanceMonitoringService');
 const threatIntelligenceService = require('./services/threatIntelligenceService');
 const aiPerformanceMonitoringService = require('./services/aiPerformanceMonitoringService');
+const emailService = require('./services/emailService');
+const realTimeProcessingService = require('./services/realTimeProcessingService');
+const advancedRateLimitingService = require('./services/advancedRateLimitingService');
 
 const app = express();
 const server = createServer(app);
@@ -124,7 +127,6 @@ app.use('/api/blockchain', blockchainRoutes);
 app.use('/api/notifications/preferences',  authenticateToken, notificationPreferencesRoutes);
 app.use('/api/notifications/analytics',    authenticateToken, notificationAnalyticsRoutes);
 app.use('/api/notifications',              authenticateToken, notificationsRoutes);
-
 
 app.get('/api/health', (req, res) => {
   res.json({ 
